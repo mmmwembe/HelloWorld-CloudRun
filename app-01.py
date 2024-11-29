@@ -1,13 +1,15 @@
+# app.py
 from flask import Flask, render_template, send_file
 import os
+from modules.installed_packages import get_installed_packages
 from datetime import datetime
-from modules import get_installed_packages
 
 app = Flask(__name__)
 
 @app.route('/')
 def hello_world():
     return 'Hello, World!'
+
 
 @app.route('/modules')
 def modules():
@@ -28,10 +30,8 @@ def download_installed_pkgs():
     # Create the filename with the current date
     current_date = datetime.now().strftime('%m-%d-%y')
     filename = f"Installed_Packages_{current_date}.txt"
-    
-    # Create temp_uploads directory if it doesn't exist
-    os.makedirs("temp_uploads", exist_ok=True)
     file_path = os.path.join("temp_uploads", filename)
+    os.makedirs("temp_uploads", exist_ok=True)
     
     # Write the data to the file
     with open(file_path, 'w') as file:
@@ -39,6 +39,9 @@ def download_installed_pkgs():
     
     # Return the file for download
     return send_file(file_path, as_attachment=True)
+
+
+
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
