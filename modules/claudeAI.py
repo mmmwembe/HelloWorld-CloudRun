@@ -8,6 +8,8 @@ handling various data processing tasks.
 
 from anthropic import Anthropic
 from google.cloud import storage
+import logging
+from typing import List, Dict, Optional, Any, Union
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import json
@@ -16,6 +18,13 @@ import requests
 
 # Load environment variables from .env file
 load_dotenv()
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 class ClaudeAI:
     """
@@ -484,43 +493,46 @@ class ClaudeAI:
             "digital_url": "http://pubs.usgs.gov/of/2012/1163/",
             "formatted_citation": "Stidolph, S.R., Sterrenburg, F.A.S., Smith, K.E.L., Kraberg, A., 2012, Stuart R. Stidolph Diatom Atlas: U.S. Geological Survey Open-File Report 2012-1163, 199 p., available at http://pubs.usgs.gov/of/2012/1163/"
         }
-
-    @staticmethod    
-    def extract_citation(self, first_two_pages_text: str, method: str = "default_citation") -> dict:
+  
+    @staticmethod
+    def extract_citation(first_two_pages_text: str, method: str = "default_citation") -> Dict[str, str]:
         """
         Extract citation information from the first two pages of text using specified method.
         
         Args:
-            first_two_pages_text (str): Text content from first two pages of PDF
-            method (str): Method to use for citation extraction. 
-                        Options: "default_citation" or "citation_from_llm"
+            first_two_pages_text: Text content from first two pages of PDF
+            method: Method to use for citation extraction. 
+                   Options: "default_citation" or "citation_from_llm"
         
         Returns:
-            dict: Citation information in standardized format
+            Dictionary containing citation information in standardized format
+            
+        Raises:
+            ValueError: If invalid method is specified
         """
         if method == "default_citation":
-            return self.get_default_citation()
+            return ClaudeAI.get_default_citation()
         
         elif method == "citation_from_llm":
             # Get the citation extraction prompt
-            prompt = self.part0_get_citation_info_for_paper()
+            prompt = ClaudeAI.part0_get_citation_info_for_paper()
             
             # Create messages for the API request
-            messages = self.part1_create_messages_for_paper_info_json(
+            messages = ClaudeAI.part1_create_messages_for_paper_info_json(
                 first_two_pages_text, 
                 prompt
             )
             
             # Get completion from Claude API
-            citation_json = self.get_completion(messages)
+            citation_json = ClaudeAI.get_completion(messages)
             
             try:
                 # Parse the JSON response
                 return json.loads(citation_json)
             except json.JSONDecodeError as e:
-                print(f"Error parsing citation JSON: {str(e)}")
+                logger.error(f"Error parsing citation JSON: {str(e)}")
                 # Fall back to default citation on error
-                return self.get_default_citation()
+                return ClaudeAI.get_default_citation()
                 
         else:
             raise ValueError("Invalid method. Use 'default_citation' or 'citation_from_llm'")
