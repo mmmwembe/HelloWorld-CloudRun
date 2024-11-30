@@ -35,6 +35,10 @@
                         // Display citation information
                         document.getElementById('citation-info').textContent = data.citation_info;
                         
+                        // Display citation information
+                        document.getElementById('extracted-images-filemetadata').textContent = data.extracted_images_file_metadata;
+
+
                         setTimeout(checkStatus, 1000);
                     }
                 });
@@ -86,6 +90,15 @@
                     <p class="text-sm text-gray-500 mb-2">Citation Information:</p>
                     <pre class="text-sm text-gray-500 text-left whitespace-pre-wrap font-mono overflow-x-auto" id="citation-info">Loading...</pre>
                 </div>
+
+                <div class="bg-gray-50 rounded p-4 mb-4">
+                    <p class="text-sm text-gray-500 mb-2">Image Extraction File Metadata Information:</p>
+                    <pre class="text-sm text-gray-500 text-left whitespace-pre-wrap font-mono overflow-x-auto" id="extracted-images-filemetadata">Loading...</pre>
+                </div>
+
+
+
+
             </div>
         </div>
     </div>

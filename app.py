@@ -38,7 +38,8 @@ processing_status = {
     'full_text': '',
     'first_two_pages_text': '',
     'filename': '',
-    'citation_info': ''  # Added new field
+    'citation_info': '',
+    'extracted_images_file_metadata':''
 }
 
 def process_pdfs(pdf_urls):
@@ -56,6 +57,8 @@ def process_pdfs(pdf_urls):
             
             # Get text content
             full_text, first_two_pages_text, filename = pdf_ops.extract_text_from_pdf(url)
+            extracted_images_file_metadata = pdf_ops.extract_images_and_metadata(url, SESSION_ID, BUCKET_EXTRACTED_IMAGES)
+            
             
             # Get citation info
             # Available methods:
@@ -73,14 +76,15 @@ def process_pdfs(pdf_urls):
             processing_status['first_two_pages_text'] = first_two_pages_text
             processing_status['filename'] = filename
             processing_status['citation_info'] = json.dumps(citation_info, indent=2)
-            
+            processing_status['extracted_images_file_metadata'] = json.dumps(extracted_images_file_metadata, indent=2)
+                        
         except Exception as e:
             print(f"Error processing PDF: {str(e)}")
             processing_status['full_text'] = 'Error extracting text'
             processing_status['first_two_pages_text'] = 'Error extracting text'
             processing_status['filename'] = 'Error extracting filename'
             processing_status['citation_info'] = 'Error extracting citation'
-            
+            processing_status['extracted_images_file_metadata'] = 'Error extracting images and file metadata'            
         # Simulate processing time
         time.sleep(10)
     
