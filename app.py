@@ -89,20 +89,28 @@ def all_papers():
 def start_processing():
     global processing_status
     
-    # Get PDF URLs from form
-    pdf_urls = json.loads(request.form['pdf_urls'])
-    
-    # Reset processing status
-    processing_status['current_index'] = 0
-    processing_status['current_url'] = ''
-    processing_status['complete'] = False
-    processing_status['total_pdfs'] = len(pdf_urls)
-    
-    # Start processing in background
-    Thread(target=process_pdfs, args=(pdf_urls,)).start()
-    
-    # Redirect to processing page
-    return redirect(url_for('show_processing'))
+    try:
+        # Get PDF URLs from form and parse JSON
+        pdf_urls = json.loads(request.form.get('pdf_urls', '[]'))
+        
+        if not pdf_urls:
+            return render_template('papers.html', error="No PDFs to process")
+        
+        # Reset processing status
+        processing_status['current_index'] = 0
+        processing_status['current_url'] = ''
+        processing_status['complete'] = False
+        processing_status['total_pdfs'] = len(pdf_urls)
+        
+        # Start processing in background
+        Thread(target=process_pdfs, args=(pdf_urls,)).start()
+        
+        # Redirect to processing page
+        return redirect(url_for('show_processing'))
+    except json.JSONDecodeError as e:
+        return render_template('papers.html', error=f"Invalid PDF data format: {str(e)}")
+    except Exception as e:
+        return render_template('papers.html', error=f"Error starting processing: {str(e)}")
 
 @app.route('/processing')
 def show_processing():
