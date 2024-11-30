@@ -73,7 +73,7 @@ def process_pdfs(pdf_urls):
             part1_prompt = claude.part1_create_paper_info_json_from_pdf_text_content_prompt()
             part1_messages = claude.part1_create_messages_for_paper_info_json(full_text, part1_prompt)
             paper_info = claude.get_completion(part1_messages)
-            time.sleep(15)
+            time.sleep(10)
             
             paper_image_urls = paper_info.get("paper_image_urls", [])
             part2_prompt = claude.part2_create_diatoms_data_object_for_paper()
@@ -107,7 +107,7 @@ def process_pdfs(pdf_urls):
             processing_status['extracted_images_file_metadata'] = json.dumps(extracted_images_file_metadata, indent=2)
             processing_status['pdf_paper_json'] = json.dumps(pdf_paper_json, indent=2)            
             processing_status['paper_info'] = json.dumps(paper_info, indent=2)                
-            processing_status['diatoms_data'] = json.dumps(diatoms_data, indent=2)   
+            processing_status['diatoms_data'] = json.dumps(paper_diatoms_data, indent=2)   
                         
         except Exception as e:
             print(f"Error processing PDF: {str(e)}")
@@ -121,7 +121,7 @@ def process_pdfs(pdf_urls):
             processing_status['diatoms_data'] = 'Error generating diatoms_data'   
                         
         # Simulate processing time
-        time.sleep(15)
+        time.sleep(10)
     
     processing_status['complete'] = True
 
