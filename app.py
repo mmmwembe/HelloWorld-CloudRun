@@ -41,7 +41,8 @@ processing_status = {
     'first_two_pages_text': '',
     'filename': '',
     'citation_info': '',
-    'extracted_images_file_metadata':''
+    'extracted_images_file_metadata':'',
+    'pdf_paper_json': '',
 }
 
 def process_pdfs(pdf_urls):
