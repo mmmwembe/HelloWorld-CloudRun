@@ -502,7 +502,7 @@ class ClaudeAI:
         Args:
             first_two_pages_text: Text content from first two pages of PDF
             method: Method to use for citation extraction. 
-                   Options: "default_citation" or "citation_from_llm"
+                Options: "default_citation" or "citation_from_llm"
         
         Returns:
             Dictionary containing citation information in standardized format
@@ -514,6 +514,9 @@ class ClaudeAI:
             return ClaudeAI.get_default_citation()
         
         elif method == "citation_from_llm":
+            # Since this is a static method, we need to instantiate ClaudeAI
+            claude_instance = ClaudeAI()
+            
             # Get the citation extraction prompt
             prompt = ClaudeAI.part0_get_citation_info_for_paper()
             
@@ -523,16 +526,20 @@ class ClaudeAI:
                 prompt
             )
             
-            # Get completion from Claude API
-            citation_json = ClaudeAI.get_completion(messages)
-            
             try:
+                # Get completion from Claude API using the instance method
+                citation_json = claude_instance.get_completion(messages)
+                
                 # Parse the JSON response
                 return json.loads(citation_json)
+                
             except json.JSONDecodeError as e:
                 logger.error(f"Error parsing citation JSON: {str(e)}")
-                # Fall back to default citation on error
                 return ClaudeAI.get_default_citation()
                 
+            except Exception as e:
+                logger.error(f"Error during API call or processing: {str(e)}")
+                return ClaudeAI.get_default_citation()
+                    
         else:
             raise ValueError("Invalid method. Use 'default_citation' or 'citation_from_llm'")
