@@ -43,6 +43,10 @@
 
                         // Display paper information                        
                         document.getElementById('paper_info').textContent = data.paper_info;
+                        
+                        // Display diatoms_data information                        
+                        document.getElementById('diatoms_data').textContent = data.diatoms_data;
+
 
 
                         setTimeout(checkStatus, 1000);
@@ -108,10 +112,14 @@
                 </div>
 
                 <div class="bg-gray-50 rounded p-4 mb-4">
-                    <p class="text-sm text-gray-500 mb-2">Paper Info:</p>
+                    <p class="text-sm text-gray-500 mb-2">Paper Info (paper_info):</p>
                     <pre class="text-sm text-gray-500 text-left whitespace-pre-wrap font-mono overflow-x-auto" id="paper_info">Loading...</pre>
                 </div>
 
+                <div class="bg-gray-50 rounded p-4 mb-4">
+                    <p class="text-sm text-gray-500 mb-2">Paper Diatoms Data (diatoms_data):</p>
+                    <pre class="text-sm text-gray-500 text-left whitespace-pre-wrap font-mono overflow-x-auto" id="diatoms_data">Loading...</pre>
+                </div>
 
 
             </div>
