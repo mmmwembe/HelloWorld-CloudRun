@@ -1,4 +1,4 @@
-from flask import Flask, render_template, send_file, request, jsonify
+from flask import Flask, render_template, send_file, request, jsonify, redirect, url_for
 import os
 from datetime import datetime
 import time
@@ -80,12 +80,41 @@ def all_papers():
         # Render template with URLs
         return render_template('papers.html', pdf_urls=pdf_urls)
     except Exception as e:
-        # Log the error for debugging
-        print(f"Error in /all_papers: {str(e)}")
         # Render template with error message
         return render_template('papers.html', 
                              pdf_urls=[], 
                              error=f"Unable to retrieve papers: {str(e)}")
+
+@app.route('/process_pdfs', methods=['POST'])
+def start_processing():
+    global processing_status
+    
+    # Get PDF URLs from form
+    pdf_urls = json.loads(request.form['pdf_urls'])
+    
+    # Reset processing status
+    processing_status['current_index'] = 0
+    processing_status['current_url'] = ''
+    processing_status['complete'] = False
+    processing_status['total_pdfs'] = len(pdf_urls)
+    
+    # Start processing in background
+    Thread(target=process_pdfs, args=(pdf_urls,)).start()
+    
+    # Redirect to processing page
+    return redirect(url_for('show_processing'))
+
+@app.route('/processing')
+def show_processing():
+    return render_template('processing.html')
+
+@app.route('/process_status')
+def get_process_status():
+    return jsonify(processing_status)
+
+@app.route('/complete')
+def complete():
+    return render_template('complete.html')
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
