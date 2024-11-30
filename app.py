@@ -57,7 +57,12 @@ def all_papers():
         # Render template with URLs
         return render_template('papers.html', pdf_urls=pdf_urls)
     except Exception as e:
-        return f"Error retrieving papers: {str(e)}", 500
+        # Log the error for debugging
+        print(f"Error in /all_papers: {str(e)}")
+        # Render template with error message
+        return render_template('papers.html', 
+                             pdf_urls=[], 
+                             error=f"Unable to retrieve papers: {str(e)}")
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
