@@ -255,37 +255,44 @@ class ClaudeAI:
     @staticmethod
     def part0_get_citation_info_for_paper():
         """
-        Create a structured prompt for processing citation information.
-
-        Returns:
-            str: Prompt with instructions and expected JSON structure
+        Creates a structured prompt for Claude to process citation information.
+        Returns a string containing the prompt with instructions and expected JSON structure.
         """
-        return """
+        prompt = """
         Please analyze the provided paper information to extract citation details.
         Return the data in the following JSON structure, maintaining strict adherence to the schema:
         
         {
-            "core_citation": {
-                "authors": ["List of authors in citation format"],
-                "year": "Publication year as string",
-                "title": "Full title of the work",
-                "type": "article/report/book/chapter"
-            },
-            "journal_info": {
-                "journal": "Full journal name",
-                "volume": "Volume number as string",
-                "issue": "Issue number as string",
-                "pages": "Page range or total pages as string"
-            },
-            "organization_info": {
-                "organization": "Publishing institution/organization",
-                "report_number": "Report ID/number"
-            },
-            "digital_ids": {
-                "doi": "Digital Object Identifier if available",
-                "url": "Direct URL to publication"
-            },
+            "authors": ["List of authors in citation format"],
+            "year": "Publication year as string",
+            "title": "Full title of the work",
+            "type": "article/report/book/chapter",
+            "journal_name": "Full journal name",
+            "journal_volume": "Volume number as string",
+            "journal_issue": "Issue number as string",
+            "journal_pages": "Page range or total pages as string",
+            "org_name": "Publishing institution/organization",
+            "org_report_number": "Report ID/number",
+            "digital_doi": "Digital Object Identifier if available",
+            "digital_url": "Direct URL to publication",
             "formatted_citation": "Complete formatted citation string"
+        }
+
+        Example:
+        {
+            "authors": ["S.R. Stidolph", "F.A.S. Sterrenburg", "K.E.L. Smith", "A. Kraberg"],
+            "year": "2012",
+            "title": "Stuart R. Stidolph Diatom Atlas",
+            "type": "report",
+            "journal_name": "",
+            "journal_volume": "",
+            "journal_issue": "",
+            "journal_pages": "199",
+            "org_name": "U.S. Geological Survey",
+            "org_report_number": "Open-File Report 2012-1163",
+            "digital_doi": "",
+            "digital_url": "http://pubs.usgs.gov/of/2012/1163/",
+            "formatted_citation": "Stidolph, S.R., Sterrenburg, F.A.S., Smith, K.E.L., Kraberg, A., 2012, Stuart R. Stidolph Diatom Atlas: U.S. Geological Survey Open-File Report 2012-1163, 199 p., available at http://pubs.usgs.gov/of/2012/1163/"
         }
 
         Important instructions:
@@ -298,6 +305,7 @@ class ClaudeAI:
         
         Parse the provided information and return only the JSON object without any additional text or explanation.
         """
+        return prompt
 
     @staticmethod
     def part1_create_paper_info_json_from_pdf_text_content_prompt():
@@ -462,25 +470,17 @@ class ClaudeAI:
         This serves as both an example and a fallback data structure.
         """
         return {
-            "core_citation": {
-                "authors": ["S.R. Stidolph", "F.A.S. Sterrenburg", "K.E.L. Smith", "A. Kraberg"],
-                "year": "2012",
-                "title": "Stuart R. Stidolph Diatom Atlas",
-                "type": "report"
-            },
-            "journal_info": {
-                "journal": "",
-                "volume": "",
-                "issue": "",
-                "pages": "199"
-            },
-            "organization_info": {
-                "organization": "U.S. Geological Survey",
-                "report_number": "Open-File Report 2012-1163"
-            },
-            "digital_ids": {
-                "doi": "",
-                "url": "http://pubs.usgs.gov/of/2012/1163/"
-            },
+            "authors": ["S.R. Stidolph", "F.A.S. Sterrenburg", "K.E.L. Smith", "A. Kraberg"],
+            "year": "2012",
+            "title": "Stuart R. Stidolph Diatom Atlas",
+            "type": "report",
+            "journal_name": "",
+            "journal_volume": "",
+            "journal_issue": "",
+            "journal_pages": "199",
+            "org_name": "U.S. Geological Survey",
+            "org_report_number": "Open-File Report 2012-1163",
+            "digital_doi": "",
+            "digital_url": "http://pubs.usgs.gov/of/2012/1163/",
             "formatted_citation": "Stidolph, S.R., Sterrenburg, F.A.S., Smith, K.E.L., Kraberg, A., 2012, Stuart R. Stidolph Diatom Atlas: U.S. Geological Survey Open-File Report 2012-1163, 199 p., available at http://pubs.usgs.gov/of/2012/1163/"
         }
