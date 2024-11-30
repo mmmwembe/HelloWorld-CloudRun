@@ -1,4 +1,4 @@
-from flask import Flask, render_template, send_file, request, jsonify, redirect, url_for, flash
+from flask import Flask, render_template, send_file, request, jsonify, redirect, url_for, flash, send_from_directory
 import os
 from datetime import datetime
 import time
@@ -143,21 +143,31 @@ def complete():
 
 
 
+from flask import send_from_directory, jsonify
+
 @app.route('/view_uploaded_pdfs')
 def view_uploaded_pdfs():
     try:
-        return send_file('templates/view_uploaded_pdfs.html')
+        # Assuming your HTML file is in the templates directory
+        return send_from_directory('templates', 'view_uploaded_pdfs.html')
     except Exception as e:
-        flash(f'Error loading PDF viewer: {str(e)}', 'danger')
-        return redirect(url_for('index'))
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/pdf_data')
 def get_pdf_data():
     try:
+        # Add debugging log
+        print(f"DataFrame size: {len(UPLOADED_PDF_FILES_DF)}")
+        
         # Convert DataFrame to dictionary format
         pdf_data = UPLOADED_PDF_FILES_DF.to_dict(orient='records')
+        
+        # Add debugging log
+        print(f"Sending {len(pdf_data)} records")
+        
         return jsonify(pdf_data)
     except Exception as e:
+        print(f"Error in get_pdf_data: {str(e)}")  # Add error logging
         return jsonify({'error': str(e)}), 500
 
 
