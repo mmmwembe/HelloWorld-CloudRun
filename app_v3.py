@@ -30,6 +30,65 @@ UPLOADED_PDF_FILES_DF = gcp_ops.initialize_paper_upload_tracker_df_from_gcp(
     bucket_name=BUCKET_PAPER_TRACKER_CSV
 )
 
+
+# Global variables for tracking processing status
+# processing_status = {
+#     'current_index': 0,
+#     'current_url': '',
+#     'complete': False,
+#     'total_pdfs': 0
+# }
+# def process_pdfs(pdf_urls):
+#     """Background task to process PDFs"""
+#     global processing_status
+    
+#     for i, url in enumerate(pdf_urls, 1):
+#         processing_status['current_index'] = i
+#         processing_status['current_url'] = url
+#         # Simulate processing time
+#         time.sleep(10)
+    
+#     processing_status['complete'] = True
+
+# processing_status = {
+#     'current_index': 0,
+#     'current_url': '',
+#     'complete': False,
+#     'total_pdfs': 0,
+#     'full_text': '',
+#     'first_two_pages_text': '',
+#     'filename': ''
+# }
+
+
+# def process_pdfs(pdf_urls):
+#     """Background task to process PDFs"""
+#     global processing_status
+    
+#     for i, url in enumerate(pdf_urls, 1):
+#         processing_status['current_index'] = i
+#         processing_status['current_url'] = url
+        
+#         # Initialize PDFOps and extract text
+#         try:
+#             pdf_ops = PDFOps()
+#             full_text, first_two_pages_text, filename = pdf_ops.extract_text_from_pdf(url)
+            
+#             # Update processing status with new information
+#             processing_status['full_text'] = full_text
+#             processing_status['first_two_pages_text'] = first_two_pages_text
+#             processing_status['filename'] = filename
+#         except Exception as e:
+#             print(f"Error processing PDF: {str(e)}")
+#             processing_status['full_text'] = 'Error extracting text'
+#             processing_status['first_two_pages_text'] = 'Error extracting text'
+#             processing_status['filename'] = 'Error extracting filename'
+            
+#         # Simulate processing time
+#         time.sleep(10)
+    
+#     processing_status['complete'] = True
+# Update processing_status in app.py
 processing_status = {
     'current_index': 0,
     'current_url': '',
@@ -80,7 +139,7 @@ def process_pdfs(pdf_urls):
             processing_status['citation_info'] = 'Error extracting citation'
             
         # Simulate processing time
-        time.sleep(60)
+        time.sleep(10)
     
     processing_status['complete'] = True
 

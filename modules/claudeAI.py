@@ -484,3 +484,43 @@ class ClaudeAI:
             "digital_url": "http://pubs.usgs.gov/of/2012/1163/",
             "formatted_citation": "Stidolph, S.R., Sterrenburg, F.A.S., Smith, K.E.L., Kraberg, A., 2012, Stuart R. Stidolph Diatom Atlas: U.S. Geological Survey Open-File Report 2012-1163, 199 p., available at http://pubs.usgs.gov/of/2012/1163/"
         }
+
+    @staticmethod    
+    def extract_citation(self, first_two_pages_text: str, method: str = "default_citation") -> dict:
+        """
+        Extract citation information from the first two pages of text using specified method.
+        
+        Args:
+            first_two_pages_text (str): Text content from first two pages of PDF
+            method (str): Method to use for citation extraction. 
+                        Options: "default_citation" or "citation_from_llm"
+        
+        Returns:
+            dict: Citation information in standardized format
+        """
+        if method == "default_citation":
+            return self.get_default_citation()
+        
+        elif method == "citation_from_llm":
+            # Get the citation extraction prompt
+            prompt = self.part0_get_citation_info_for_paper()
+            
+            # Create messages for the API request
+            messages = self.part1_create_messages_for_paper_info_json(
+                first_two_pages_text, 
+                prompt
+            )
+            
+            # Get completion from Claude API
+            citation_json = self.get_completion(messages)
+            
+            try:
+                # Parse the JSON response
+                return json.loads(citation_json)
+            except json.JSONDecodeError as e:
+                print(f"Error parsing citation JSON: {str(e)}")
+                # Fall back to default citation on error
+                return self.get_default_citation()
+                
+        else:
+            raise ValueError("Invalid method. Use 'default_citation' or 'citation_from_llm'")
