@@ -164,42 +164,24 @@ class ClaudeAI:
         except Exception as e:
             print(f"Error updating and saving papers: {str(e)}")
             return False
-            
-    def get_public_urls(self, bucket_name, session_id):
-        """
-        Get public URLs for all PDF files in the specified bucket path.
         
-        Args:
-            bucket_name (str): Name of the GCS bucket
-            session_id (str): Session ID for the path
-            
-        Returns:
-            list: Array of public URLs for PDF files
-        """
+        
+    def get_public_urls(self, bucket_name, session_id):
         try:
-            storage_client = self.get_storage_client()
-            bucket = storage_client.bucket(bucket_name)
-            
-            # Define the prefix for the PDF files
-            prefix = f"pdf/{session_id}/"
-            
-            # List all blobs in the prefix path
-            blobs = bucket.list_blobs(prefix=prefix)
-            
-            # Generate signed URLs that expire in 1 hour
-            public_urls = []
-            for blob in blobs:
-                if blob.name.lower().endswith('.pdf'):
-                    # Generate a signed URL that expires in 1 hour
-                    url = blob.generate_signed_url(
-                        version="v4",
-                        expiration=datetime.utcnow() + timedelta(hours=1),
-                        method="GET"
-                    )
-                    public_urls.append(url)
-            
-            return public_urls
-            
+            # Get the storage client
+            client = self.get_storage_client()
+
+            # Access the specified bucket
+            bucket = client.bucket(bucket_name)
+
+            # List all blobs (files) under the specified prefix (pdf/session_id/)
+            blobs = bucket.list_blobs(prefix=f"pdf/{session_id}/")
+
+            # Generate the public URLs for the blobs
+            return [f"https://storage.googleapis.com/{bucket_name}/{blob.name}" for blob in blobs]
+        
         except Exception as e:
-            print(f"Error getting public URLs: {str(e)}")
+            # Log the exception if needed
+            print(f"Error retrieving public URLs: {e}")
+            # Return an empty list in case of an error
             return []
