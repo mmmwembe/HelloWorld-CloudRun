@@ -453,3 +453,34 @@ class ClaudeAI:
                 ]
             }
         ]
+        
+         
+    @staticmethod        
+    def get_default_citation():
+        """
+        Returns a dictionary containing default citation information for the Stidolph Diatom Atlas.
+        This serves as both an example and a fallback data structure.
+        """
+        return {
+            "core_citation": {
+                "authors": ["S.R. Stidolph", "F.A.S. Sterrenburg", "K.E.L. Smith", "A. Kraberg"],
+                "year": "2012",
+                "title": "Stuart R. Stidolph Diatom Atlas",
+                "type": "report"
+            },
+            "journal_info": {
+                "journal": "",
+                "volume": "",
+                "issue": "",
+                "pages": "199"
+            },
+            "organization_info": {
+                "organization": "U.S. Geological Survey",
+                "report_number": "Open-File Report 2012-1163"
+            },
+            "digital_ids": {
+                "doi": "",
+                "url": "http://pubs.usgs.gov/of/2012/1163/"
+            },
+            "formatted_citation": "Stidolph, S.R., Sterrenburg, F.A.S., Smith, K.E.L., Kraberg, A., 2012, Stuart R. Stidolph Diatom Atlas: U.S. Geological Survey Open-File Report 2012-1163, 199 p., available at http://pubs.usgs.gov/of/2012/1163/"
+        }
