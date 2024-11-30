@@ -1,13 +1,18 @@
 from flask import Flask, render_template, send_file
 import os
 from datetime import datetime
-from modules import get_installed_packages
+from modules.installed_packages import get_installed_packages
+from modules import ClaudeAI
 
 app = Flask(__name__)
 
+# Constants
+SESSION_ID = 'eb9db0ca54e94dbc82cffdab497cde13'
+PAPERS_BUCKET = 'papers-diatoms'
+
 @app.route('/')
-def hello_world():
-    return 'Hello, World!'
+def index():
+    return render_template('index.html')
 
 @app.route('/modules')
 def modules():
@@ -39,6 +44,20 @@ def download_installed_pkgs():
     
     # Return the file for download
     return send_file(file_path, as_attachment=True)
+
+@app.route('/all_papers')
+def all_papers():
+    try:
+        # Initialize ClaudeAI instance
+        claude = ClaudeAI()
+        
+        # Get public URLs for all PDFs
+        pdf_urls = claude.get_public_urls(PAPERS_BUCKET, SESSION_ID)
+        
+        # Render template with URLs
+        return render_template('papers.html', pdf_urls=pdf_urls)
+    except Exception as e:
+        return f"Error retrieving papers: {str(e)}", 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))

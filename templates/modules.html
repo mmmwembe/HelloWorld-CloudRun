@@ -2,16 +2,36 @@
 <html>
 <head>
     <title>Installed Packages</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
 </head>
-<body>
-    <h1>Installed Python Packages</h1>
-    <ul>
-        {% for name, version in packages.items() %}
-            <li>{{ name }}: {{ version }}</li>
-        {% endfor %}
-    </ul>
-    <form action="/download_installed_pkgs" method="get">
-        <button type="submit">Download Installed Packages</button>
-    </form>
+<body class="bg-gray-100 min-h-screen py-6">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="bg-white shadow rounded-lg p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-2xl font-bold text-gray-900">Installed Python Packages</h1>
+                <a href="/" class="text-blue-600 hover:text-blue-800 font-medium">Back to Home</a>
+            </div>
+            
+            <div class="bg-white shadow overflow-hidden sm:rounded-md mb-6">
+                <ul class="divide-y divide-gray-200">
+                    {% for name, version in packages.items() %}
+                        <li class="px-6 py-4 hover:bg-gray-50">
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm font-medium text-gray-900">{{ name }}</span>
+                                <span class="text-sm text-gray-500">{{ version }}</span>
+                            </div>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+            <form action="/download_installed_pkgs" method="get" class="text-center">
+                <button type="submit" 
+                        class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    Download Installed Packages
+                </button>
+            </form>
+        </div>
+    </div>
 </body>
 </html>
