@@ -1,9 +1,6 @@
-from flask import Flask, render_template, send_file, request, jsonify
+from flask import Flask, render_template, send_file
 import os
 from datetime import datetime
-import time
-import json
-from threading import Thread
 from modules.installed_packages import get_installed_packages
 from modules import ClaudeAI
 
@@ -12,26 +9,6 @@ app = Flask(__name__)
 # Constants
 SESSION_ID = 'eb9db0ca54e94dbc82cffdab497cde13'
 PAPERS_BUCKET = 'papers-diatoms'
-
-# Global variables for tracking processing status
-processing_status = {
-    'current_index': 0,
-    'current_url': '',
-    'complete': False,
-    'total_pdfs': 0
-}
-
-def process_pdfs(pdf_urls):
-    """Background task to process PDFs"""
-    global processing_status
-    
-    for i, url in enumerate(pdf_urls, 1):
-        processing_status['current_index'] = i
-        processing_status['current_url'] = url
-        # Simulate processing time
-        time.sleep(10)
-    
-    processing_status['complete'] = True
 
 @app.route('/')
 def index():
@@ -78,7 +55,7 @@ def all_papers():
         pdf_urls = claude.get_public_urls(PAPERS_BUCKET, SESSION_ID)
         
         # Render template with URLs
-        return render_template('papers.html', pdf_urls=pdf_urls)
+        return render_template('papers.html', pdf_urls=pdf_urls, num_papers = len(pdf_urls))
     except Exception as e:
         # Log the error for debugging
         print(f"Error in /all_papers: {str(e)}")
@@ -89,4 +66,4 @@ def all_papers():
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
-    app.run(host='0.0.0.0', port=port, threaded=True)
+    app.run(host='0.0.0.0', port=port)
