@@ -41,6 +41,10 @@
                         // Display pdf_paper_json information                        
                         document.getElementById('pdf_paper_json').textContent = data.pdf_paper_json;
 
+                        // Display paper information                        
+                        document.getElementById('paper_info').textContent = data.paper_info;
+
+
                         setTimeout(checkStatus, 1000);
                     }
                 });
@@ -102,6 +106,12 @@
                     <p class="text-sm text-gray-500 mb-2">pdf_paper_json:</p>
                     <pre class="text-sm text-gray-500 text-left whitespace-pre-wrap font-mono overflow-x-auto" id="pdf_paper_json">Loading...</pre>
                 </div>
+
+                <div class="bg-gray-50 rounded p-4 mb-4">
+                    <p class="text-sm text-gray-500 mb-2">Paper Info:</p>
+                    <pre class="text-sm text-gray-500 text-left whitespace-pre-wrap font-mono overflow-x-auto" id="paper_info">Loading...</pre>
+                </div>
+
 
 
             </div>

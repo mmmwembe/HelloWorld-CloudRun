@@ -43,6 +43,7 @@ processing_status = {
     'citation_info': '',
     'extracted_images_file_metadata':'',
     'pdf_paper_json': '',
+    'paper_info':'',
 }
 
 def process_pdfs(pdf_urls):
@@ -58,10 +59,19 @@ def process_pdfs(pdf_urls):
             pdf_ops = PDFOps()
             claude = ClaudeAI()
             
+            papers_json_public_url = f"https://storage.googleapis.com/{PAPERS_BUCKET_JSON_FILES}/jsons_from_pdfs/{SESSION_ID}/{SESSION_ID}.json"
+        
+            # Load existing PAPER_JSON_FILES
+            PAPER_JSON_FILES = gcp_ops.load_paper_json_files(papers_json_public_url)
+            
             # Get text content
             full_text, first_two_pages_text, filename = pdf_ops.extract_text_from_pdf(url)
             extracted_images_file_metadata = pdf_ops.extract_images_and_metadata(url, SESSION_ID, BUCKET_EXTRACTED_IMAGES)
             
+            
+            part1_prompt = claude.part1_create_paper_info_json_from_pdf_text_content_prompt()
+            part1_messages = claude.part1_create_messages_for_paper_info_json(full_text, part1_prompt)
+            paper_info = claude.get_completion(part1_messages)
             
             # Get citation info. Available methods: (a) "default_citation" - Returns predefined Stidolph Diatom Atlas citation
             # (b) "citation_from_llm": Uses Claude to extract citation from the text
@@ -75,8 +85,8 @@ def process_pdfs(pdf_urls):
                 "extracted_images_file_metadata": safe_value(extracted_images_file_metadata),
                 "pdf_text_content": safe_value(full_text),
                 "first_two_pages_text": safe_value(first_two_pages_text),
-                "paper_info": "",
-                "papers_json_public_url": "",
+                "paper_info": safe_value(paper_info),
+                "papers_json_public_url": safe_value(papers_json_public_url),
                 "diatoms_data": [],
                 "citation": safe_value(citation_info)
             }
@@ -89,7 +99,7 @@ def process_pdfs(pdf_urls):
             processing_status['citation_info'] = json.dumps(citation_info, indent=2)
             processing_status['extracted_images_file_metadata'] = json.dumps(extracted_images_file_metadata, indent=2)
             processing_status['pdf_paper_json'] = json.dumps(pdf_paper_json, indent=2)            
-            
+            processing_status['paper_info'] = json.dumps(pdf_paper_json, indent=2)                
                         
         except Exception as e:
             print(f"Error processing PDF: {str(e)}")
@@ -99,9 +109,10 @@ def process_pdfs(pdf_urls):
             processing_status['citation_info'] = 'Error extracting citation'
             processing_status['extracted_images_file_metadata'] = 'Error extracting images and file metadata'            
             processing_status['pdf_paper_json'] = 'Error generating pdf_paper_json'      
-
+            processing_status['paper_info'] = 'Error generating paper_info'     
+            
         # Simulate processing time
-        time.sleep(10)
+        time.sleep(30)
     
     processing_status['complete'] = True
 
