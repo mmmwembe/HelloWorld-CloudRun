@@ -32,9 +32,6 @@
                         const fullTextPreview = data.full_text.substring(0, 500) + '...';
                         document.getElementById('full-text').textContent = fullTextPreview;
                         
-                        // Display citation information
-                        document.getElementById('citation-info').textContent = data.citation_info;
-                        
                         setTimeout(checkStatus, 1000);
                     }
                 });
@@ -77,14 +74,9 @@
                     <p class="text-sm text-gray-500 text-left" id="first-two-pages">Loading...</p>
                 </div>
                 
-                <div class="bg-gray-50 rounded p-4 mb-4">
+                <div class="bg-gray-50 rounded p-4">
                     <p class="text-sm text-gray-500 mb-2">Full Text Preview:</p>
                     <p class="text-sm text-gray-500 text-left" id="full-text">Loading...</p>
-                </div>
-
-                <div class="bg-gray-50 rounded p-4 mb-4">
-                    <p class="text-sm text-gray-500 mb-2">Citation Information:</p>
-                    <pre class="text-sm text-gray-500 text-left whitespace-pre-wrap font-mono overflow-x-auto" id="citation-info">Loading...</pre>
                 </div>
             </div>
         </div>
