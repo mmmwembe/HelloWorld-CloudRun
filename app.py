@@ -82,7 +82,7 @@ def process_pdfs(pdf_urls):
             processing_status['citation_info'] = 'Error extracting citation'
             
         # Simulate processing time
-        time.sleep(60)
+        time.sleep(10)
     
     processing_status['complete'] = True
 
