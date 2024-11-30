@@ -20,6 +20,8 @@ PAPERS_BUCKET_JSON_FILES ='papers-diatoms-jsons'
 BUCKET_EXTRACTED_IMAGES = 'papers-extracted-images-bucket-mmm'
 BUCKET_PAPER_TRACKER_CSV = 'papers-extracted-pages-csv-bucket-mmm'
 
+def safe_value(value):
+    return value if value else ""
 
 # Create an instance of GCPOps
 gcp_ops = GCPOps()
@@ -60,18 +62,24 @@ def process_pdfs(pdf_urls):
             extracted_images_file_metadata = pdf_ops.extract_images_and_metadata(url, SESSION_ID, BUCKET_EXTRACTED_IMAGES)
             
             
-            # Get citation info
-            # Available methods:
-            # - "default_citation": Returns predefined Stidolph Diatom Atlas citation
-            # - "citation_from_llm": Uses Claude to extract citation from the text
+            # Get citation info. Available methods: (a) "default_citation" - Returns predefined Stidolph Diatom Atlas citation
+            # (b) "citation_from_llm": Uses Claude to extract citation from the text
             #citation_info = claude.get_default_citation()
             citation_info = claude.extract_citation(first_two_pages_text=first_two_pages_text, method="default_citation")
             #citation_info = claude.extract_citation(first_two_pages_text=first_two_pages_text, method="citation_from_llm")
             
-            # citation_info = claude.extract_citation(
-            #     first_two_pages_text=first_two_pages_text,
-            #     method="citation_from_llm"  # or use "default_citation"
-            # )
+            pdf_paper_json = {
+                "pdf_file_url": safe_value(url),
+                "filename": safe_value(filename),
+                "extracted_images_file_metadata": safe_value(extracted_images_file_metadata),
+                "pdf_text_content": safe_value(full_text),
+                "first_two_pages_text": safe_value(first_two_pages_text),
+                "paper_info": "",
+                "papers_json_public_url": "",
+                "diatoms_data": [],
+                "citation": safe_value(citation_info)
+            }
+            
             
             # Update processing status with new information
             processing_status['full_text'] = full_text
@@ -79,6 +87,8 @@ def process_pdfs(pdf_urls):
             processing_status['filename'] = filename
             processing_status['citation_info'] = json.dumps(citation_info, indent=2)
             processing_status['extracted_images_file_metadata'] = json.dumps(extracted_images_file_metadata, indent=2)
+            processing_status['pdf_paper_json'] = json.dumps(pdf_paper_json, indent=2)            
+            
                         
         except Exception as e:
             print(f"Error processing PDF: {str(e)}")
@@ -87,6 +97,8 @@ def process_pdfs(pdf_urls):
             processing_status['filename'] = 'Error extracting filename'
             processing_status['citation_info'] = 'Error extracting citation'
             processing_status['extracted_images_file_metadata'] = 'Error extracting images and file metadata'            
+            processing_status['pdf_paper_json'] = 'Error generating pdf_paper_json'      
+
         # Simulate processing time
         time.sleep(10)
     

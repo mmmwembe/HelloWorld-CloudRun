@@ -38,6 +38,8 @@
                         // Display citation information
                         document.getElementById('extracted-images-filemetadata').textContent = data.extracted_images_file_metadata;
 
+                        // Display pdf_paper_json information                        
+                        document.getElementById('extracted-images-filemetadata').textContent = data.pdf_paper_json;
 
                         setTimeout(checkStatus, 1000);
                     }
@@ -95,8 +97,11 @@
                     <p class="text-sm text-gray-500 mb-2">Image Extraction File Metadata Information:</p>
                     <pre class="text-sm text-gray-500 text-left whitespace-pre-wrap font-mono overflow-x-auto" id="extracted-images-filemetadata">Loading...</pre>
                 </div>
-
-
+                
+                <div class="bg-gray-50 rounded p-4 mb-4">
+                    <p class="text-sm text-gray-500 mb-2">pdf_paper_json:</p>
+                    <pre class="text-sm text-gray-500 text-left whitespace-pre-wrap font-mono overflow-x-auto" id="pdf_paper_json">Loading...</pre>
+                </div>
 
 
             </div>
