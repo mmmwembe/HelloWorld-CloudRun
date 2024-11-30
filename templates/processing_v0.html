@@ -22,16 +22,6 @@
                     } else {
                         document.getElementById('current-index').textContent = data.current_index;
                         document.getElementById('current-url').textContent = data.current_url;
-                        document.getElementById('filename').textContent = data.filename;
-                        
-                        // Display preview of first two pages (first 500 characters)
-                        const previewText = data.first_two_pages_text.substring(0, 500) + '...';
-                        document.getElementById('first-two-pages').textContent = previewText;
-                        
-                        // Display preview of full text (first 500 characters)
-                        const fullTextPreview = data.full_text.substring(0, 500) + '...';
-                        document.getElementById('full-text').textContent = fullTextPreview;
-                        
                         setTimeout(checkStatus, 1000);
                     }
                 });
@@ -59,24 +49,8 @@
                     Processing PDF <span id="current-index" class="font-bold">-</span>
                 </div>
                 
-                <div class="bg-gray-50 rounded p-4 mb-4">
-                    <p class="text-sm text-gray-500 mb-2">Current URL:</p>
-                    <p class="text-sm text-gray-500 break-all" id="current-url">Loading...</p>
-                </div>
-                
-                <div class="bg-gray-50 rounded p-4 mb-4">
-                    <p class="text-sm text-gray-500 mb-2">Filename:</p>
-                    <p class="text-sm text-gray-500 break-all" id="filename">Loading...</p>
-                </div>
-                
-                <div class="bg-gray-50 rounded p-4 mb-4">
-                    <p class="text-sm text-gray-500 mb-2">First Two Pages Preview:</p>
-                    <p class="text-sm text-gray-500 text-left" id="first-two-pages">Loading...</p>
-                </div>
-                
-                <div class="bg-gray-50 rounded p-4">
-                    <p class="text-sm text-gray-500 mb-2">Full Text Preview:</p>
-                    <p class="text-sm text-gray-500 text-left" id="full-text">Loading...</p>
+                <div class="bg-gray-50 rounded p-4 break-all">
+                    <p class="text-sm text-gray-500" id="current-url">Loading...</p>
                 </div>
             </div>
         </div>
