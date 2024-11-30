@@ -99,7 +99,7 @@ def process_pdfs(pdf_urls):
             processing_status['citation_info'] = json.dumps(citation_info, indent=2)
             processing_status['extracted_images_file_metadata'] = json.dumps(extracted_images_file_metadata, indent=2)
             processing_status['pdf_paper_json'] = json.dumps(pdf_paper_json, indent=2)            
-            processing_status['paper_info'] = json.dumps(pdf_paper_json, indent=2)                
+            processing_status['paper_info'] = json.dumps(paper_info, indent=2)                
                         
         except Exception as e:
             print(f"Error processing PDF: {str(e)}")
