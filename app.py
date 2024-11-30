@@ -61,10 +61,12 @@ def process_pdfs(pdf_urls):
             # Available methods:
             # - "default_citation": Returns predefined Stidolph Diatom Atlas citation
             # - "citation_from_llm": Uses Claude to extract citation from the text
-            citation_info = claude.extract_citation(
-                first_two_pages_text=first_two_pages_text,
-                method="citation_from_llm"  # or use "default_citation"
-            )
+            citation_info = claude.get_default_citation()
+            
+            # citation_info = claude.extract_citation(
+            #     first_two_pages_text=first_two_pages_text,
+            #     method="citation_from_llm"  # or use "default_citation"
+            # )
             
             # Update processing status with new information
             processing_status['full_text'] = full_text
