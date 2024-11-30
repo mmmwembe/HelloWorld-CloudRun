@@ -1,38 +1,28 @@
-"""
-Claude AI Integration Script for Processing Diatom Research Papers
-
-This script provides functionality to interact with the Claude API for processing
-scientific papers about diatoms, managing storage in Google Cloud Storage, and
-handling various data processing tasks.
-"""
-
 from anthropic import Anthropic
 from google.cloud import storage
 from datetime import datetime, timedelta
-from dotenv import load_dotenv
 import json
 import os
 import requests
+from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
 
 class ClaudeAI:
-    """
-    A class to handle interactions with Claude AI API and manage paper data storage.
-    """
-    
     def __init__(self):
-        """Initialize the ClaudeAI instance with necessary credentials and configurations."""
         self.CLAUDE_API_KEY = os.getenv('CLAUDE_API_KEY')
         self.secret_json = os.getenv('GOOGLE_SECRET_JSON')
         self.client = Anthropic(api_key=self.CLAUDE_API_KEY)
         self.MODEL_NAME = "claude-3-5-sonnet-20241022"
 
-    # Core API Methods
+    def get_storage_client(self):
+        """Get authenticated GCS client"""
+        return storage.Client.from_service_account_info(json.loads(self.secret_json))
+
     def get_completion(self, messages):
         """
-        Send a request to Claude API and return the completion.
+        Sends the request to Claude API and returns the completion.
 
         Args:
             messages (list): Array of message objects
@@ -58,48 +48,8 @@ class ClaudeAI:
         except Exception as e:
             return json.dumps({"error": str(e)})
 
-    # Storage Methods
-    def get_storage_client(self):
-        """
-        Get authenticated Google Cloud Storage client.
-
-        Returns:
-            storage.Client: Authenticated GCS client
-        """
-        return storage.Client.from_service_account_info(json.loads(self.secret_json))
-
-    def get_public_urls(self, bucket_name, session_id):
-        """
-        Generate public URLs for all files in a specific GCS path.
-
-        Args:
-            bucket_name (str): Name of the GCS bucket
-            session_id (str): Session identifier for the path prefix
-
-        Returns:
-            list: List of public URLs for the files
-        """
-        try:
-            client = self.get_storage_client()
-            bucket = client.bucket(bucket_name)
-            blobs = bucket.list_blobs(prefix=f"pdf/{session_id}/")
-            return [f"https://storage.googleapis.com/{bucket_name}/{blob.name}" for blob in blobs]
-        
-        except Exception as e:
-            print(f"Error retrieving public URLs: {e}")
-            return []
-
-    # Paper JSON File Methods
     def load_paper_json_files(self, papers_json_public_url):
-        """
-        Load existing paper JSON files from GCS.
-
-        Args:
-            papers_json_public_url (str): Public URL of the JSON files
-
-        Returns:
-            list: List of paper JSON objects
-        """
+        """Load existing paper JSON files if they exist."""
         try:
             storage_client = self.get_storage_client()
             bucket_name = papers_json_public_url.split('/')[3]
@@ -116,16 +66,7 @@ class ClaudeAI:
         return []
 
     def save_paper_json_files(self, papers_json_public_url, paper_json_files):
-        """
-        Save paper JSON files to GCS.
-
-        Args:
-            papers_json_public_url (str): Public URL where files should be saved
-            paper_json_files (list): List of paper JSON objects to save
-
-        Returns:
-            str: Public URL where files were saved, or empty string on error
-        """
+        """Save paper JSON files to GCS."""
         try:
             storage_client = self.get_storage_client()
             bucket_name = papers_json_public_url.split('/')[3]
@@ -144,15 +85,7 @@ class ClaudeAI:
             return ""
 
     def load_PAPER_JSON_FILES(self, json_url):
-        """
-        Load paper JSON data from a URL.
-
-        Args:
-            json_url (str): URL of the JSON data
-
-        Returns:
-            list: List of paper JSON objects
-        """
+        """Loads and returns paper JSON data from URL"""
         try:
             response = requests.get(json_url)
             if response.status_code == 200:
@@ -164,17 +97,8 @@ class ClaudeAI:
             print(f"Error loading JSON: {str(e)}")
             return []
 
-    # Diatoms Data Methods
     def get_DIATOMS_DATA(self, json_url):
-        """
-        Load JSON data from URL and extract diatoms_data into an array.
-
-        Args:
-            json_url (str): URL of the JSON data
-
-        Returns:
-            list: Array of diatoms data objects
-        """
+        """Load JSON data from URL and extract diatoms_data into an array."""
         DIATOMS_DATA_ARRAY = []
         
         try:
@@ -208,17 +132,7 @@ class ClaudeAI:
         return []
 
     def update_and_save_papers(self, json_url, PAPER_JSON_FILES, DIATOMS_DATA):
-        """
-        Update papers JSON with modified DIATOMS_DATA and save back to GCS.
-
-        Args:
-            json_url (str): URL where the JSON should be saved
-            PAPER_JSON_FILES (list): List of paper JSON objects
-            DIATOMS_DATA (list): List of diatoms data objects
-
-        Returns:
-            bool: True if successful, False otherwise
-        """
+        """Update papers JSON with modified DIATOMS_DATA and save back to GCS."""
         try:
             diatoms_data_map = {data['image_url']: data for data in DIATOMS_DATA}
             
@@ -250,17 +164,36 @@ class ClaudeAI:
         except Exception as e:
             print(f"Error updating and saving papers: {str(e)}")
             return False
+        
+        
+    def get_public_urls(self, bucket_name, session_id):
+        try:
+            # Get the storage client
+            client = self.get_storage_client()
 
-    # Prompt Generation Methods
-    @staticmethod
+            # Access the specified bucket
+            bucket = client.bucket(bucket_name)
+
+            # List all blobs (files) under the specified prefix (pdf/session_id/)
+            blobs = bucket.list_blobs(prefix=f"pdf/{session_id}/")
+
+            # Generate the public URLs for the blobs
+            return [f"https://storage.googleapis.com/{bucket_name}/{blob.name}" for blob in blobs]
+        
+        except Exception as e:
+            # Log the exception if needed
+            print(f"Error retrieving public URLs: {e}")
+            # Return an empty list in case of an error
+            return []
+
+    # Citation Information Functions
+
     def part0_get_citation_info_for_paper():
         """
-        Create a structured prompt for processing citation information.
-
-        Returns:
-            str: Prompt with instructions and expected JSON structure
+        Creates a structured prompt for Claude to process citation information.
+        Returns a string containing the prompt with instructions and expected JSON structure.
         """
-        return """
+        prompt = """
         Please analyze the provided paper information to extract citation details.
         Return the data in the following JSON structure, maintaining strict adherence to the schema:
         
@@ -298,67 +231,69 @@ class ClaudeAI:
         
         Parse the provided information and return only the JSON object without any additional text or explanation.
         """
-
-    @staticmethod
+        return prompt
+    
+    
     def part1_create_paper_info_json_from_pdf_text_content_prompt():
-        """
-        Create a structured prompt for processing diatom data.
+    """
+    Creates a structured prompt for Claude to process diatom data.
+    Returns a string containing the prompt with instructions and expected JSON structure.
+    """
+    prompt = """
+    Please analyze the provided text and extract information about marine diatoms.
+    Return the data in the following JSON structure, maintaining strict adherence to the schema:
 
-        Returns:
-            str: Prompt with instructions and expected JSON structure
-        """
-        return """
-        Please analyze the provided text and extract information about marine diatoms.
-        Return the data in the following JSON structure, maintaining strict adherence to the schema:
+    {
+        "figure_caption": "Plate 3: Marine Diatoms from the Azores",
+        "source_material_location": "South East coast of Faial, Caldeira Inferno",
+        "source_material_coordinates": "38° 31' N; 28° 38' W",
+        "source_material_description": "An open crater of a small volcano, shallow and sandy. Gathered from Pinna (molluscs) and stones.",
+        "source_material_date_collected": "June 1st, 1981",
+        "source_material_received_from": "Hans van den Heuvel, Leiden",
+        "source_material_date_received": "March 17th, 1988",
+        "source_material_note": "Material also deposited in Rijksherbarium Leiden, the Netherlands. Aliquot sample and slide also in collection Sterrenburg, Nr. 249.",
+        "diatom_species_array": [
+            {
+                "species_index": 65,
+                "species_name": "Diploneis bombus",
+                "species_authors": ["Cleve-Euler", "Backman"],
+                "species_year": 1922,
+                "species_references": [
+                    {
+                        "author": "Hendey",
+                        "year": 1964,
+                        "figure": "pl. 32, fig. 2"
+                    },
+                    Repeat as necessary
+                ],
+                "formatted_species_name": "Diploneis_bombus",
+                "genus": "Diploneis",
+                "species_magnification": "1000",
+                "species_scale_bar_microns": "30",
+                "species_note": ""
+            },
+            Repeat as necessary
+        ]
+    }
 
-        {
-            "figure_caption": "Plate 3: Marine Diatoms from the Azores",
-            "source_material_location": "South East coast of Faial, Caldeira Inferno",
-            "source_material_coordinates": "38° 31' N; 28° 38' W",
-            "source_material_description": "An open crater of a small volcano, shallow and sandy. Gathered from Pinna (molluscs) and stones.",
-            "source_material_date_collected": "June 1st, 1981",
-            "source_material_received_from": "Hans van den Heuvel, Leiden",
-            "source_material_date_received": "March 17th, 1988",
-            "source_material_note": "Material also deposited in Rijksherbarium Leiden, the Netherlands. Aliquot sample and slide also in collection Sterrenburg, Nr. 249.",
-            "diatom_species_array": [
-                {
-                    "species_index": 65,
-                    "species_name": "Diploneis bombus",
-                    "species_authors": ["Cleve-Euler", "Backman"],
-                    "species_year": 1922,
-                    "species_references": [
-                        {
-                            "author": "Hendey",
-                            "year": 1964,
-                            "figure": "pl. 32, fig. 2"
-                        }
-                    ],
-                    "formatted_species_name": "Diploneis_bombus",
-                    "genus": "Diploneis",
-                    "species_magnification": "1000",
-                    "species_scale_bar_microns": "30",
-                    "species_note": ""
-                }
-            ]
-        }
+    Important instructions:
+    1. Extract all information exactly as presented in the source text
+    2. Maintain proper formatting for scientific names
+    3. Ensure all dates are in the original format
+    4. Convert coordinates to standardized format (degrees, minutes)
+    5. Include all references with complete citation information
+    6. Generate formatted_species_name by replacing spaces with underscores
+    7. Leave empty strings for missing information rather than omitting fields
+    8. Ensure all numerical values are properly typed (numbers not strings)
 
-        Important instructions:
-        1. Extract all information exactly as presented in the source text
-        2. Maintain proper formatting for scientific names
-        3. Ensure all dates are in the original format
-        4. Convert coordinates to standardized format (degrees, minutes)
-        5. Include all references with complete citation information
-        6. Generate formatted_species_name by replacing spaces with underscores
-        7. Leave empty strings for missing information rather than omitting fields
-        8. Ensure all numerical values are properly typed (numbers not strings)
+    Parse the provided text and return only the JSON object without any additional text or explanation.
+    """
+    return prompt
 
-        Parse the provided text and return only the JSON object without any additional text or explanation.
-        """
 
-    @staticmethod
     def part1_create_messages_for_paper_info_json(pdf_text_content, prompt):
         """
-        Create the message array for the Claude API request.
+        Creates the message array for the Claude API request.
 
         Args:
             pdf_text_content (str): The extracted text from the PDF
@@ -383,18 +318,17 @@ class ClaudeAI:
             }
         ]
 
-    @staticmethod
-    def part2_create_diatoms_data_object_for_paper():
-        """
-        Create a structured prompt for processing diatom data.
 
-        Returns:
-            str: Prompt with instructions and expected JSON structure
-        """
-        return """
-        Please analyze the provided paper information and image URLs to extract information about diatoms.
-        Return the data in the following JSON structure, maintaining strict adherence to the schema:
+def part2_create_diatoms_data_object_for_paper():
+    """
+    Creates a structured prompt for Claude to process diatom data.
+    Returns a string containing the prompt with instructions and expected JSON structure.
+    """
+    prompt = """
+    Please analyze the provided paper information and image URLs to extract information about diatoms.
+    Return the data in the following JSON structure, maintaining strict adherence to the schema:
 
+    
         {
             "image_url": "get respective full url from paper_image_url for this dict",
             "image_width": "",
@@ -412,44 +346,46 @@ class ClaudeAI:
             ]
         }
 
-        Important instructions:
-        1. Extract all information exactly as presented in the source text
-        2. Use index and formatted_species_name for label and formatted species for species
-        3. Leave empty strings for missing information rather than omitting fields
-        4. Ensure all JSON fields are properly quoted and formatted
+    Important instructions:
+    1. Extract all information exactly as presented in the source text
+    2. Use index and formatted_species_name for label and formatted species for species
+    3. Leave empty strings for missing information rather than omitting fields
+    4. Ensure all JSON fields are properly quoted and formatted
 
-        Parse the provided information and return only the JSON object without any additional text or explanation.
-        """
+    Parse the provided information and return only the JSON object without any additional text or explanation.
+    """
+    return prompt
 
-    @staticmethod
-    def part2_create_messages_for_diatoms_data_object_creation(paper_info, paper_image_urls, prompt):
-        """
-        Create the message array for the Claude API request.
+def part2_create_messages_for_diatoms_data_object_creation(paper_info, paper_image_urls, prompt):  # Fixed: Added prompt as third parameter
+    """
+    Creates the message array for the Claude API request.
 
-        Args:
-            paper_info (dict): Dictionary containing paper information and diatom species data
-            paper_image_urls (list): List of image URLs associated with the paper
-            prompt (str): The formatted prompt with instructions
+    Args:
+        paper_info (dict): Dictionary containing paper information and diatom species data
+        paper_image_urls (list): List of image URLs associated with the paper
+        prompt (str): The formatted prompt with instructions
 
-        Returns:
-            list: Array of message objects for the API request
-        """
-        return [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": f"Paper Information: {json.dumps(paper_info, indent=2)}"
-                    },
-                    {
-                        "type": "text",
-                        "text": f"Image URLs: {json.dumps(paper_image_urls, indent=2)}"
-                    },
-                    {
-                        "type": "text",
-                        "text": prompt
-                    }
-                ]
-            }
-        ]
+    Returns:
+        list: Array of message objects for the API request
+    """
+    return [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": f"Paper Information: {json.dumps(paper_info, indent=2)}"
+                },
+                {
+                    "type": "text",
+                    "text": f"Image URLs: {json.dumps(paper_image_urls, indent=2)}"
+                },
+                {
+                    "type": "text",
+                    "text": prompt
+                }
+            ]
+        }
+    ]
+
+
