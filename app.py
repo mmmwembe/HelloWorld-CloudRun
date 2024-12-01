@@ -3,6 +3,7 @@ import os
 from datetime import datetime
 import time
 import json
+import tempfile
 from threading import Thread
 from modules.installed_packages import get_installed_packages
 from modules import ClaudeAI
@@ -82,8 +83,6 @@ def parse_output(output):
         print("Content:")
         print(repr(stripped_output))  # Use repr to make debugging easier
         return None
-
-
 
 processing_status = {
     'current_index': 0,
@@ -326,6 +325,121 @@ def see_diatoms_data():
         # Return an error page or redirect to a safe page
         return render_template('error.html', error=str(e)), 500
 
+
+#________________________________Labelling_____________________________________________
+papers_json_public_url = f"https://storage.googleapis.com/{PAPERS_BUCKET_JSON_FILES}/jsons_from_pdfs/{SESSION_ID}/{SESSION_ID}.json"
+
+diatoms_data = ClaudeAI.get_DIATOMS_DATA(papers_json_public_url)
+
+def load_saved_labels():
+    """Load saved labels for current session if they exist"""
+    try:
+        json_public_url = f"https://storage.googleapis.com/{PAPERS_BUCKET_LABELLING}/labels/{SESSION_ID}/{SESSION_ID}.json"
+        DIATOMS_DATA = ClaudeAI.get_DIATOMS_DATA(json_public_url)
+        return DIATOMS_DATA
+    except Exception as e:
+        print(f"Error loading from GCP: {e}")
+        return diatoms_data  # Return base data if loading fails
+
+def save_labels(data):
+    """Save labels for current session to GCP storage"""
+    try:
+        # Create a temporary file to upload
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as temp_file:
+            json.dump(data, temp_file, indent=4)
+            temp_path = temp_file.name
+        
+        # Upload to GCP and then delete temporary file
+        gcp_ops.save_json_to_bucket(temp_path, PAPERS_BUCKET_LABELLING, SESSION_ID)
+        os.unlink(temp_path)
+    except Exception as e:
+        print(f"Error saving to GCP: {e}")
+        raise
+
+@app.route('/label', methods=['GET', 'POST'])
+def label():
+    if request.method == 'POST':
+        updated_data = request.json
+        save_labels(updated_data)
+        return jsonify({'success': True})
+    
+    return render_template('label-react.html')
+
+@app.route('/api/diatoms', methods=['GET'])
+def get_diatoms():
+    image_index = request.args.get('index', 0, type=int)
+    
+    # Load current session's data
+    current_data = load_saved_labels()
+    
+    # Ensure index is within bounds
+    image_index = min(max(0, image_index), len(current_data) - 1)
+    
+    return jsonify({
+        'current_index': image_index,
+        'total_images': len(current_data),
+        'data': current_data[image_index]
+    })
+
+@app.route('/api/save', methods=['POST'])
+def save():
+    try:
+        current_data = load_saved_labels()
+        image_index = request.json.get('image_index', 0)
+        updated_info = request.json.get('info', [])
+        
+        # Update only the info for the current image
+        current_data[image_index]['info'] = updated_info
+        
+        # Save the updated dataset
+        save_labels(current_data)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Labels saved successfully',
+            'timestamp': datetime.now().isoformat(),
+            'saved_index': image_index,
+            'gcp_url': f"https://storage.googleapis.com/{PAPERS_BUCKET_LABELLING}/labels/{SESSION_ID}/{SESSION_ID}.json"
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/download', methods=['GET'])
+def download_labels():
+    """Download the saved labels file for current session"""
+    try:
+        json_public_url = f"https://storage.googleapis.com/{PAPERS_BUCKET_LABELLING}/labels/{SESSION_ID}/{SESSION_ID}.json"
+        data = ClaudeAI.get_DIATOMS_DATA(json_public_url)
+        
+        # Create a temporary file for download
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as temp_file:
+            json.dump(data, temp_file, indent=4)
+            temp_path = temp_file.name
+        
+        try:
+            # Send the file and then clean up
+            response = send_file(
+                temp_path,
+                mimetype='application/json',
+                as_attachment=True,
+                download_name=f'diatom_labels_{SESSION_ID}.json'
+            )
+            # Clean up temp file after sending
+            os.unlink(temp_path)
+            return response
+        except Exception as e:
+            # Clean up temp file if sending fails
+            os.unlink(temp_path)
+            raise e
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+#________________________________Labelling_____________________________________________
 
 
 
