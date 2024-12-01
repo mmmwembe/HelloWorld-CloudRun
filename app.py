@@ -32,6 +32,29 @@ UPLOADED_PDF_FILES_DF = gcp_ops.initialize_paper_upload_tracker_df_from_gcp(
     bucket_name=BUCKET_PAPER_TRACKER_CSV
 )
 
+def get_paper_image_urls(metadata):
+    """
+    Ensures the input metadata is a dictionary, parses it as JSON if necessary,
+    and returns the value of the `paper_image_urls` key.
+
+    Args:
+        metadata (dict or str): The metadata input, either as a dictionary or a JSON string.
+
+    Returns:
+        list: The value of the `paper_image_urls` key, or an empty list if not found.
+    """
+    if not isinstance(metadata, dict):
+        try:
+            # Attempt to parse metadata as JSON
+            metadata = json.loads(metadata)
+            print("metadata has been converted to a dictionary.")
+        except json.JSONDecodeError:
+            print("Failed to convert metadata to a dictionary. Ensure it is in valid JSON format.")
+            return []  # Return an empty list if parsing fails
+
+    # Return the value of `paper_image_urls` or an empty list if the key is missing
+    return metadata.get("paper_image_urls", [])
+
 processing_status = {
     'current_index': 0,
     'current_url': '',
@@ -75,7 +98,9 @@ def process_pdfs(pdf_urls):
             paper_info = claude.get_completion(part1_messages)
             time.sleep(10)
             
-            paper_image_urls ="Testing Testing!!!" #  paper_info.get("paper_image_urls", [])
+            paper_image_urls = get_paper_image_urls(paper_info)
+            
+            # paper_image_urls ="Testing Testing!!!" #  paper_info.get("paper_image_urls", [])
             # part2_prompt = claude.part2_create_diatoms_data_object_for_paper()
             # part2_messages =claude.part2_create_messages_for_diatoms_data_object_creation(paper_info, paper_image_urls, part2_prompt)
             # paper_diatoms_data = claude.get_completion(part2_messages)
