@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Complete Diatoms Data</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            background-color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .json {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        h2 {
+            color: #333;
+            margin-top: 0;
+        }
+        a {
+            color: #0066cc;
+            text-decoration: none;
+            word-break: break-all;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        .toggle-btn {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-bottom: 10px;
+        }
+        .toggle-btn:hover {
+            background-color: #0056b3;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <!-- JSON URL Section -->
+    <div class="card">
+        <h2>Paper JSON URL</h2>
+        <a href="{{ json_url }}" target="_blank">{{ json_url }}</a>
+    </div>
+
+    <!-- Raw JSON Data -->
+    <div class="card">
+        <h2>Complete Diatoms Data</h2>
+        <button class="toggle-btn" onclick="toggleRawData()">Toggle Raw JSON</button>
+        <div id="rawData" class="json hidden">{{ diatoms_data | tojson(indent=2) | safe }}</div>
+    </div>
+
+    <!-- Formatted View -->
+    <div class="card">
+        <h2>Formatted View</h2>
+        <div id="formattedData"></div>
+    </div>
+
+    <script>
+        function toggleRawData() {
+            const rawData = document.getElementById('rawData');
+            rawData.classList.toggle('hidden');
+        }
+
+        // Function to create formatted HTML from JSON data
+        function formatData(data) {
+            let html = '';
+            
+            // Function to format a key-value pair
+            function formatKeyValue(key, value) {
+                if (value === null || value === '') return '';
+                if (typeof value === 'object' && !Array.isArray(value)) {
+                    return `<div style="margin-left: 20px;">
+                        <strong>${key}:</strong>
+                        <div style="margin-left: 20px;">${formatData(value)}</div>
+                    </div>`;
+                }
+                if (Array.isArray(value)) {
+                    if (value.length === 0) return '';
+                    return `<div style="margin-left: 20px;">
+                        <strong>${key}:</strong>
+                        <div style="margin-left: 20px;">${value.map(item => {
+                            if (typeof item === 'object') {
+                                return formatData(item);
+                            }
+                            return item;
+                        }).join('<br>')}</div>
+                    </div>`;
+                }
+                if (typeof value === 'string' && value.startsWith('http')) {
+                    return `<div style="margin-left: 20px;">
+                        <strong>${key}:</strong> 
+                        <a href="${value}" target="_blank">${value}</a>
+                    </div>`;
+                }
+                return `<div style="margin-left: 20px;">
+                    <strong>${key}:</strong> ${value}
+                </div>`;
+            }
+
+            // Format each key-value pair in the object
+            for (let key in data) {
+                if (data.hasOwnProperty(key)) {
+                    html += formatKeyValue(key, data[key]);
+                }
+            }
+            return html;
+        }
+
+        // Get the data and format it
+        const diatomsData = {{ diatoms_data | tojson | safe }};
+        document.getElementById('formattedData').innerHTML = formatData(diatomsData);
+    </script>
+</body>
+</html>

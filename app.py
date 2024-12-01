@@ -20,6 +20,8 @@ PAPERS_BUCKET_JSON_FILES ='papers-diatoms-jsons'
 BUCKET_EXTRACTED_IMAGES = 'papers-extracted-images-bucket-mmm'
 BUCKET_PAPER_TRACKER_CSV = 'papers-extracted-pages-csv-bucket-mmm'
 
+DIATOMS_DATA =[]
+
 def safe_value(value):
     return value if value else ""
 
@@ -300,7 +302,14 @@ def get_pdf_data():
         return jsonify({'error': str(e)}), 500
 
 
-
+@app.route('/diatoms_data')
+def see_diatoms_data():
+    
+    papers_json_public_url = f"https://storage.googleapis.com/{PAPERS_BUCKET_JSON_FILES}/jsons_from_pdfs/{SESSION_ID}/{SESSION_ID}.json"
+    
+    DIATOMS_DATA = ClaudeAI.get_DIATOMS_DATA(papers_json_public_url)
+    
+    return render_template('diatoms_data.html', json_url=papers_json_public_url, diatoms_data = json.dumps(DIATOMS_DATA, indent=2) )
 
 
 
