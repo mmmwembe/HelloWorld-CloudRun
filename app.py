@@ -350,7 +350,8 @@ def save_labels(data):
             temp_path = temp_file.name
         
         # Upload to GCP and then delete temporary file
-        gcp_ops.save_json_to_bucket(temp_path, PAPERS_BUCKET_LABELLING, SESSION_ID)
+        # gcp_ops.save_json_to_bucket(temp_path, PAPERS_BUCKET_LABELLING, SESSION_ID)
+        gcp_ops.save_json_to_bucket(temp_path, PAPERS_BUCKET_JSON_FILES, SESSION_ID)
         os.unlink(temp_path)
     except Exception as e:
         print(f"Error saving to GCP: {e}")
@@ -399,7 +400,7 @@ def save():
             'message': 'Labels saved successfully',
             'timestamp': datetime.now().isoformat(),
             'saved_index': image_index,
-            'gcp_url': f"https://storage.googleapis.com/{PAPERS_BUCKET_LABELLING}/labels/{SESSION_ID}/{SESSION_ID}.json"
+            'gcp_url': f"https://storage.googleapis.com/{PAPERS_BUCKET_JSON_FILES}/labels/{SESSION_ID}/{SESSION_ID}.json" # f"https://storage.googleapis.com/{PAPERS_BUCKET_LABELLING}/labels/{SESSION_ID}/{SESSION_ID}.json"
         })
     except Exception as e:
         return jsonify({
@@ -412,7 +413,7 @@ def save():
 def download_labels():
     """Download the saved labels file for current session"""
     try:
-        json_public_url = f"https://storage.googleapis.com/{PAPERS_BUCKET_LABELLING}/labels/{SESSION_ID}/{SESSION_ID}.json"
+        json_public_url = f"https://storage.googleapis.com/{PAPERS_BUCKET_JSON_FILES}/labels/{SESSION_ID}/{SESSION_ID}.json" # f"https://storage.googleapis.com/{PAPERS_BUCKET_LABELLING}/labels/{SESSION_ID}/{SESSION_ID}.json"
         data = ClaudeAI.get_DIATOMS_DATA(json_public_url)
         
         # Create a temporary file for download
