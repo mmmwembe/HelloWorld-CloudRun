@@ -75,7 +75,7 @@ def process_pdfs(pdf_urls):
             paper_info = claude.get_completion(part1_messages)
             time.sleep(10)
             
-            paper_image_urls = paper_info.get("paper_image_urls", [])
+            paper_image_urls ="Testing Testing!!!" #  paper_info.get("paper_image_urls", [])
             # part2_prompt = claude.part2_create_diatoms_data_object_for_paper()
             # part2_messages =claude.part2_create_messages_for_diatoms_data_object_creation(paper_info, paper_image_urls, part2_prompt)
             # paper_diatoms_data = claude.get_completion(part2_messages)
