@@ -307,9 +307,9 @@ def see_diatoms_data():
         # Check if required variables are defined
         if not PAPERS_BUCKET_JSON_FILES or not SESSION_ID:
             raise ValueError("Required configuration variables are not set")
-            
-        papers_json_public_url = f"https://storage.googleapis.com/{PAPERS_BUCKET_JSON_FILES}/jsons_from_pdfs/{SESSION_ID}/{SESSION_ID}.json"
         
+        papers_json_public_url = f"https://storage.googleapis.com/{PAPERS_BUCKET_JSON_FILES}/jsons_from_pdfs/{SESSION_ID}/{SESSION_ID}.json"
+          
         DIATOMS_DATA = ClaudeAI.get_DIATOMS_DATA(papers_json_public_url)
         
         # Check if we got valid data
@@ -327,19 +327,19 @@ def see_diatoms_data():
 
 
 #________________________________Labelling_____________________________________________
-papers_json_public_url = f"https://storage.googleapis.com/{PAPERS_BUCKET_JSON_FILES}/jsons_from_pdfs/{SESSION_ID}/{SESSION_ID}.json"
+# papers_json_public_url = f"https://storage.googleapis.com/{PAPERS_BUCKET_JSON_FILES}/jsons_from_pdfs/{SESSION_ID}/{SESSION_ID}.json"
 
-diatoms_data = ClaudeAI.get_DIATOMS_DATA(papers_json_public_url)
+# diatoms_data = ClaudeAI.get_DIATOMS_DATA(papers_json_public_url)
 
 def load_saved_labels():
     """Load saved labels for current session if they exist"""
     try:
-        json_public_url = f"https://storage.googleapis.com/{PAPERS_BUCKET_LABELLING}/labels/{SESSION_ID}/{SESSION_ID}.json"
+        json_public_url = f"https://storage.googleapis.com/{PAPERS_BUCKET_JSON_FILES}/jsons_from_pdfs/{SESSION_ID}/{SESSION_ID}.json" #f"https://storage.googleapis.com/{PAPERS_BUCKET_LABELLING}/labels/{SESSION_ID}/{SESSION_ID}.json"
         DIATOMS_DATA = ClaudeAI.get_DIATOMS_DATA(json_public_url)
         return DIATOMS_DATA
     except Exception as e:
         print(f"Error loading from GCP: {e}")
-        return diatoms_data  # Return base data if loading fails
+        return []
 
 def save_labels(data):
     """Save labels for current session to GCP storage"""

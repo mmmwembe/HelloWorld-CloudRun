@@ -19,11 +19,11 @@
 
     <script>
         async function fetchAndDisplayData() {
-            const PAPERS_BUCKET_JSON_FILES = 'your-bucket-name'; // Replace with your bucket name
-            const SESSION_ID = 'your-session-id'; // Replace with your session ID
+            const PAPERS_BUCKET_JSON_FILES = 'papers-diatoms-jsons'; // Replace with your bucket name
+            const SESSION_ID = 'eb9db0ca54e94dbc82cffdab497cde13'; // Replace with your session ID
             
             try {
-                const papers_json_public_url = `https://storage.googleapis.com/${PAPERS_BUCKET_JSON_FILES}/jsons_from_pdfs/${SESSION_ID}/${SESSION_ID}.json`;
+                const papers_json_public_url = `https://storage.googleapis.com/jsons_from_pdfs/${SESSION_ID}/${SESSION_ID}.json`;
                 const response = await fetch(papers_json_public_url);
                 const data = await response.json();
                 
