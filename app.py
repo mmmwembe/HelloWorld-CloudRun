@@ -175,7 +175,7 @@ def process_pdfs(pdf_urls):
             processing_status['diatoms_data'] = 'Error generating diatoms_data'   
                         
         # Simulate processing time
-        time.sleep(20)
+        time.sleep(25)
     
     processing_status['complete'] = True
 
@@ -304,12 +304,27 @@ def get_pdf_data():
 
 @app.route('/diatoms_data')
 def see_diatoms_data():
-    
-    papers_json_public_url = f"https://storage.googleapis.com/{PAPERS_BUCKET_JSON_FILES}/jsons_from_pdfs/{SESSION_ID}/{SESSION_ID}.json"
-    
-    DIATOMS_DATA = ClaudeAI.get_DIATOMS_DATA(papers_json_public_url)
-    
-    return render_template('diatoms_data.html', json_url=papers_json_public_url, diatoms_data = json.dumps(DIATOMS_DATA, indent=2) )
+    try:
+        # Check if required variables are defined
+        if not PAPERS_BUCKET_JSON_FILES or not SESSION_ID:
+            raise ValueError("Required configuration variables are not set")
+            
+        papers_json_public_url = f"https://storage.googleapis.com/{PAPERS_BUCKET_JSON_FILES}/jsons_from_pdfs/{SESSION_ID}/{SESSION_ID}.json"
+        
+        DIATOMS_DATA = ClaudeAI.get_DIATOMS_DATA(papers_json_public_url)
+        
+        # Check if we got valid data
+        if not DIATOMS_DATA:
+            raise ValueError("No diatoms data retrieved")
+            
+        return render_template('diatoms_data.html', 
+                             json_url=papers_json_public_url, 
+                             diatoms_data=DIATOMS_DATA)
+                             
+    except Exception as e:
+        app.logger.error(f"Error in diatoms_data route: {str(e)}")
+        # Return an error page or redirect to a safe page
+        return render_template('error.html', error=str(e)), 500
 
 
 

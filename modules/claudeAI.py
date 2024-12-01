@@ -139,9 +139,10 @@ class ClaudeAI:
             diatoms_data_array.append(diatom_data)
         
         # Package the diatoms data
-        paper_diatoms_data = {
-            "diatoms_data": diatoms_data_array
-        } if diatoms_data_array else {}
+        paper_diatoms_data = diatoms_data_array if diatoms_data_array else []
+        # paper_diatoms_data = {
+        #     "diatoms_data": diatoms_data_array
+        # } if diatoms_data_array else {}
         
         if not diatoms_data_array:
             logger.warning("No diatoms data was generated")
