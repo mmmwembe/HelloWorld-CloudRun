@@ -21,7 +21,10 @@ PAPERS_BUCKET_JSON_FILES ='papers-diatoms-jsons'
 BUCKET_EXTRACTED_IMAGES = 'papers-extracted-images-bucket-mmm'
 BUCKET_PAPER_TRACKER_CSV = 'papers-extracted-pages-csv-bucket-mmm'
 
+
+PAPER_JSON_FILES =[]
 DIATOMS_DATA =[]
+
 
 def safe_value(value):
     return value if value else ""
@@ -144,11 +147,14 @@ def process_pdfs(pdf_urls):
             }
             
             
-                    # Check if paper already exists in PAPER_JSON_FILES
-            if not any(paper['pdf_file_url'] ==url for paper in PAPER_JSON_FILES):
-                PAPER_JSON_FILES.append(pdf_paper_json)
+            
+            
+            # Check if paper already exists in PAPER_JSON_FILES
+            # if not any(paper['pdf_file_url'] ==url for paper in PAPER_JSON_FILES):
+            #     PAPER_JSON_FILES.append(pdf_paper_json)
                 
             # Save updated PAPER_JSON_FILES
+            PAPER_JSON_FILES.append(pdf_paper_json)
             papers_json_public_url = gcp_ops.save_paper_json_files(papers_json_public_url, PAPER_JSON_FILES)
             
             
@@ -174,7 +180,7 @@ def process_pdfs(pdf_urls):
             processing_status['diatoms_data'] = 'Error generating diatoms_data'   
                         
         # Simulate processing time
-        time.sleep(25)
+        time.sleep(15)
     
     processing_status['complete'] = True
 
@@ -345,14 +351,16 @@ def save_labels(data):
     """Save labels for current session to GCP storage"""
     try:
         # Create a temporary file to upload
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as temp_file:
-            json.dump(data, temp_file, indent=4)
-            temp_path = temp_file.name
+        # with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as temp_file:
+        #     json.dump(data, temp_file, indent=4)
+        #     temp_path = temp_file.name
         
         # Upload to GCP and then delete temporary file
         # gcp_ops.save_json_to_bucket(temp_path, PAPERS_BUCKET_LABELLING, SESSION_ID)
-        gcp_ops.save_json_to_bucket(temp_path, PAPERS_BUCKET_JSON_FILES, SESSION_ID)
-        os.unlink(temp_path)
+        papers_json_public_url = f"https://storage.googleapis.com/{PAPERS_BUCKET_JSON_FILES}/jsons_from_pdfs/{SESSION_ID}/{SESSION_ID}.json"
+        ClaudeAI.update_and_save_papers(papers_json_public_url, PAPER_JSON_FILES, DIATOMS_DATA)
+        # gcp_ops.save_json_to_bucket(temp_path, PAPERS_BUCKET_JSON_FILES, SESSION_ID)
+        # os.unlink(temp_path)
     except Exception as e:
         print(f"Error saving to GCP: {e}")
         raise

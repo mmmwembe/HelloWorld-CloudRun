@@ -594,3 +594,6 @@ class ClaudeAI:
         except Exception as e:
             logger.error(f"Error updating and saving papers: {str(e)}")
             return False
+        
+        # Example usage:
+        # updated_public_url = ClaudeAI.update_and_save_papers(json_url, PAPER_JSON_FILES, DIATOMS_DATA)
