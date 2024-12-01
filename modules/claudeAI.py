@@ -64,13 +64,15 @@ class ClaudeAI:
 
         except Exception as e:
             return {"error": str(e)}
+        
 
-    def process_paper(self, full_text: str) -> Tuple[Dict[str, Any], Dict[str, Any], List[str]]:
+    def process_paper(self, full_text: str, extracted_images_file_metadata: Dict) -> Tuple[Dict[str, Any], Dict[str, Any], List[str]]:
         """
         Process a paper's full text to extract paper info, diatoms data, and image URLs.
         
         Args:
             full_text (str): The complete text content of the paper
+            extracted_images_file_metadata (Dict): Metadata containing extracted image information
             
         Returns:
             tuple: (paper_info, paper_diatoms_data, paper_image_urls)
@@ -87,47 +89,54 @@ class ClaudeAI:
             logger.error("Failed to extract paper info")
             return {}, {}, []
             
-        # Extract image URLs and species array
-        paper_image_urls = paper_info.get("paper_image_urls", [])
+        # Get species array from paper info
         species_array = paper_info.get("diatom_species_array", [])
         
-        if not paper_image_urls:
-            logger.warning("No image URLs found in paper info")
         if not species_array:
             logger.warning("No species found in paper info")
-            
+        
+        # Get image URLs from extracted_images_file_metadata
+        paper_image_urls = extracted_images_file_metadata.get('paper_image_urls', [])
+        if not paper_image_urls:
+            logger.warning("No image URLs found in extracted_images_file_metadata")
+                
         logger.info(f"Found {len(paper_image_urls)} images and {len(species_array)} species")
         
         # Create diatoms data for each image URL using species information
         diatoms_data_array = []
         
-        for image_url in paper_image_urls:
-            # Create info entries for all species
-            info_array = []
-            for species in species_array:
-                try:
-                    info_entry = {
-                        "label": [f"{species['species_index']} {species['formatted_species_name']}"],
-                        "index": species['species_index'],
-                        "species": species['formatted_species_name'],
-                        "bbox": "",
-                        "yolo_bbox": "",
-                        "segmentation": "",
-                        "embeddings": ""
-                    }
-                    info_array.append(info_entry)
-                except KeyError as e:
-                    logger.error(f"Missing required field in species data: {e}")
-                    continue
-            
-            if info_array:  # Only create entry if we have species info
-                diatom_data = {
-                    "image_url": image_url,
-                    "image_width": "",
-                    "image_height": "",
-                    "info": info_array
+        # Set image_url to empty string if no URLs available
+        try:
+            image_url = paper_image_urls[0]
+        except (IndexError, TypeError):
+            image_url = ""
+        
+        # Create info entries for all species
+        info_array = []
+        for species in species_array:
+            try:
+                info_entry = {
+                    "label": [f"{species['species_index']} {species['formatted_species_name']}"],
+                    "index": species['species_index'],
+                    "species": species['formatted_species_name'],
+                    "bbox": "",
+                    "yolo_bbox": "",
+                    "segmentation": "",
+                    "embeddings": ""
                 }
-                diatoms_data_array.append(diatom_data)
+                info_array.append(info_entry)
+            except KeyError as e:
+                logger.error(f"Missing required field in species data: {e}")
+                continue
+        
+        if info_array:  # Only create entry if we have species info
+            diatom_data = {
+                "image_url": image_url,
+                "image_width": "",
+                "image_height": "",
+                "info": info_array
+            }
+            diatoms_data_array.append(diatom_data)
         
         # Package the diatoms data
         paper_diatoms_data = {
@@ -138,6 +147,7 @@ class ClaudeAI:
             logger.warning("No diatoms data was generated")
             
         return paper_info, paper_diatoms_data, paper_image_urls
+
 
     # Storage Methods
     def get_storage_client(self):
