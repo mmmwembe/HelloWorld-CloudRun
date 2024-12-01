@@ -5,6 +5,7 @@ This script provides functionality to interact with the Claude API for processin
 scientific papers about diatoms, managing storage in Google Cloud Storage, and
 handling various data processing tasks.
 """
+
 from anthropic import Anthropic
 from google.cloud import storage
 import logging
@@ -83,60 +84,40 @@ class ClaudeAI:
         part1_messages = self.part1_create_messages_for_paper_info_json(full_text, part1_prompt)
         paper_info = self.get_completion(part1_messages)
         
-        if not paper_info or "error" in paper_info:
-            logger.error("Failed to extract paper info")
-            return {}, {}, []
-            
-        # Extract image URLs and species array
+        # Extract image URLs
         paper_image_urls = paper_info.get("paper_image_urls", [])
-        species_array = paper_info.get("diatom_species_array", [])
-        
-        if not paper_image_urls:
-            logger.warning("No image URLs found in paper info")
-        if not species_array:
-            logger.warning("No species found in paper info")
-            
-        logger.info(f"Found {len(paper_image_urls)} images and {len(species_array)} species")
         
         # Create diatoms data for each image URL using species information
         diatoms_data_array = []
-        
         for image_url in paper_image_urls:
-            # Create info entries for all species
+            species_array = paper_info.get("diatom_species_array", [])
+            
             info_array = []
             for species in species_array:
-                try:
-                    info_entry = {
-                        "label": [f"{species['species_index']} {species['formatted_species_name']}"],
-                        "index": species['species_index'],
-                        "species": species['formatted_species_name'],
-                        "bbox": "",
-                        "yolo_bbox": "",
-                        "segmentation": "",
-                        "embeddings": ""
-                    }
-                    info_array.append(info_entry)
-                except KeyError as e:
-                    logger.error(f"Missing required field in species data: {e}")
-                    continue
-            
-            if info_array:  # Only create entry if we have species info
-                diatom_data = {
-                    "image_url": image_url,
-                    "image_width": "",
-                    "image_height": "",
-                    "info": info_array
+                info_entry = {
+                    "label": [f"{species['species_index']} {species['formatted_species_name']}"],
+                    "index": species['species_index'],
+                    "species": species['formatted_species_name'],
+                    "bbox": "",
+                    "yolo_bbox": "",
+                    "segmentation": "",
+                    "embeddings": ""
                 }
-                diatoms_data_array.append(diatom_data)
+                info_array.append(info_entry)
+            
+            diatom_data = {
+                "image_url": image_url,
+                "image_width": "",
+                "image_height": "",
+                "info": info_array
+            }
+            diatoms_data_array.append(diatom_data)
         
         # Package the diatoms data
         paper_diatoms_data = {
             "diatoms_data": diatoms_data_array
-        } if diatoms_data_array else {}
+        }
         
-        if not diatoms_data_array:
-            logger.warning("No diatoms data was generated")
-            
         return paper_info, paper_diatoms_data, paper_image_urls
 
     # Storage Methods
@@ -272,8 +253,7 @@ class ClaudeAI:
             str: Prompt with instructions and expected JSON structure
         """
         return """
-        Please analyze the provided text in detail and extract ALL information about marine diatoms.
-        Pay special attention to extracting every single diatom species mentioned.
+        Please analyze the provided text and extract information about marine diatoms.
         Return the data in the following JSON structure, maintaining strict adherence to the schema:
 
         {
@@ -305,21 +285,22 @@ class ClaudeAI:
                     "species_scale_bar_microns": "30",
                     "species_note": ""
                 }
+                
+                Repeat as necessary to get all the diatom species 
             ]
         }
 
-        CRITICAL INSTRUCTIONS:
-        1. Extract EVERY SINGLE diatom species mentioned in the text
-        2. Do not skip any species even if they seem similar or repeated
-        3. Include all species details including indices, names, authors, and references
-        4. Maintain proper formatting for scientific names
-        5. Process the entire text thoroughly to find all species mentions
+        Important instructions:
+        1. Extract all information exactly as presented in the source text
+        2. Maintain proper formatting for scientific names
+        3. Ensure all dates are in the original format
+        4. Convert coordinates to standardized format (degrees, minutes)
+        5. Include all references with complete citation information
         6. Generate formatted_species_name by replacing spaces with underscores
         7. Leave empty strings for missing information rather than omitting fields
-        8. Parse numbers as integers where appropriate (species_index, year, etc.)
-        9. Look for species information in figures, plates, descriptions, and footnotes
+        8. Ensure all numerical values are properly typed (numbers not strings)
 
-        Review the text multiple times to ensure no species are missed. Parse the provided text and return only the JSON object without any additional text or explanation.
+        Parse the provided text and return only the JSON object without any additional text or explanation.
         """
 
     @staticmethod
@@ -379,6 +360,8 @@ class ClaudeAI:
                             "segmentation": "",
                             "embeddings": ""
                         }
+                        
+                        Repeat as necessary to get all the diatom species 
                     ]
                 }
             ]
