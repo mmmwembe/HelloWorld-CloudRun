@@ -9,7 +9,7 @@ handling various data processing tasks.
 from anthropic import Anthropic
 from google.cloud import storage
 import logging
-from typing import List, Dict, Optional, Any, Union, Tuple
+from typing import List, Dict, Optional, Any, Union
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import json
@@ -39,7 +39,7 @@ class ClaudeAI:
         self.MODEL_NAME = "claude-3-5-sonnet-20241022"
 
     # Core API Methods
-    def get_completion(self, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def get_completion(self, messages):
         """
         Send a request to Claude API and return the completion.
 
@@ -47,7 +47,7 @@ class ClaudeAI:
             messages (list): Array of message objects
 
         Returns:
-            dict: Parsed JSON response from Claude
+            str: Claude's response containing the JSON data
         """
         try:
             response = self.client.messages.create(
@@ -57,43 +57,15 @@ class ClaudeAI:
             )
 
             try:
-                return json.loads(response.content[0].text)
+                json_response = json.loads(response.content[0].text)
+                return json.dumps(json_response, indent=2)
             except json.JSONDecodeError:
-                return {"error": "Invalid JSON in response"}
+                return json.dumps({"error": "Invalid JSON in response"})
             except (IndexError, AttributeError):
-                return {"error": "Unexpected response format"}
+                return json.dumps({"error": "Unexpected response format"})
 
         except Exception as e:
-            return {"error": str(e)}
-
-    def process_paper(self, full_text: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-        """
-        Process a paper's full text to extract paper info and diatoms data.
-        
-        Args:
-            full_text (str): The complete text content of the paper
-            
-        Returns:
-            tuple: (paper_info, paper_diatoms_data) as dictionaries
-        """
-        # Get paper info
-        part1_prompt = self.part1_create_paper_info_json_from_pdf_text_content_prompt()
-        part1_messages = self.part1_create_messages_for_paper_info_json(full_text, part1_prompt)
-        paper_info = self.get_completion(part1_messages)
-        
-        # Extract image URLs
-        paper_image_urls = paper_info.get("paper_image_urls", [])
-        
-        # Get diatoms data
-        part2_prompt = self.part2_create_diatoms_data_object_for_paper()
-        part2_messages = self.part2_create_messages_for_diatoms_data_object_creation(
-            paper_info, 
-            paper_image_urls, 
-            part2_prompt
-        )
-        paper_diatoms_data = self.get_completion(part2_messages)
-        
-        return paper_info, paper_diatoms_data
+            return json.dumps({"error": str(e)})
 
     # Storage Methods
     def get_storage_client(self):
@@ -105,7 +77,7 @@ class ClaudeAI:
         """
         return storage.Client.from_service_account_info(json.loads(self.secret_json))
 
-    def get_public_urls(self, bucket_name: str, session_id: str) -> List[str]:
+    def get_public_urls(self, bucket_name, session_id):
         """
         Generate public URLs for all files in a specific GCS path.
 
@@ -123,10 +95,11 @@ class ClaudeAI:
             return [f"https://storage.googleapis.com/{bucket_name}/{blob.name}" for blob in blobs]
         
         except Exception as e:
-            logger.error(f"Error retrieving public URLs: {e}")
+            print(f"Error retrieving public URLs: {e}")
             return []
 
-    def load_paper_json_files(self, papers_json_public_url: str) -> List[Dict[str, Any]]:
+    # Paper JSON File Methods
+    def load_paper_json_files(self, papers_json_public_url):
         """
         Load existing paper JSON files from GCS.
 
@@ -148,11 +121,10 @@ class ClaudeAI:
                 content = blob.download_as_string()
                 return json.loads(content)
         except Exception as e:
-            logger.error(f"Error loading paper JSON files: {str(e)}")
+            print(f"Error loading paper JSON files: {str(e)}")
         return []
 
-    def save_paper_json_files(self, papers_json_public_url: str, 
-                            paper_json_files: List[Dict[str, Any]]) -> str:
+    def save_paper_json_files(self, papers_json_public_url, paper_json_files):
         """
         Save paper JSON files to GCS.
 
@@ -177,12 +149,120 @@ class ClaudeAI:
             )
             return papers_json_public_url
         except Exception as e:
-            logger.error(f"Error saving paper JSON files: {str(e)}")
+            print(f"Error saving paper JSON files: {str(e)}")
             return ""
+
+    def load_PAPER_JSON_FILES(self, json_url):
+        """
+        Load paper JSON data from a URL.
+
+        Args:
+            json_url (str): URL of the JSON data
+
+        Returns:
+            list: List of paper JSON objects
+        """
+        try:
+            response = requests.get(json_url)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                print(f"Failed to load JSON. Status code: {response.status_code}")
+                return []
+        except Exception as e:
+            print(f"Error loading JSON: {str(e)}")
+            return []
+
+    # Diatoms Data Methods
+    def get_DIATOMS_DATA(self, json_url):
+        """
+        Load JSON data from URL and extract diatoms_data into an array.
+
+        Args:
+            json_url (str): URL of the JSON data
+
+        Returns:
+            list: Array of diatoms data objects
+        """
+        DIATOMS_DATA_ARRAY = []
+        
+        try:
+            response = requests.get(json_url)
+            response.raise_for_status()
+            paper_json_files = response.json()
+            
+            for paper in paper_json_files:
+                diatoms_data = paper.get("diatoms_data")
+                
+                if diatoms_data:
+                    if isinstance(diatoms_data, str):
+                        try:
+                            diatoms_data = json.loads(diatoms_data)
+                        except json.JSONDecodeError:
+                            print(f"Skipping invalid JSON in diatoms_data")
+                            continue
+                    
+                    DIATOMS_DATA_ARRAY.append(diatoms_data)
+            
+            print(f"Successfully extracted diatoms data from {len(DIATOMS_DATA_ARRAY)} papers")
+            return DIATOMS_DATA_ARRAY
+            
+        except requests.exceptions.RequestException as e:
+            print(f"Error fetching data from URL: {str(e)}")
+        except json.JSONDecodeError as e:
+            print(f"Error parsing JSON data: {str(e)}")
+        except Exception as e:
+            print(f"Unexpected error: {str(e)}")
+        
+        return []
+
+    def update_and_save_papers(self, json_url, PAPER_JSON_FILES, DIATOMS_DATA):
+        """
+        Update papers JSON with modified DIATOMS_DATA and save back to GCS.
+
+        Args:
+            json_url (str): URL where the JSON should be saved
+            PAPER_JSON_FILES (list): List of paper JSON objects
+            DIATOMS_DATA (list): List of diatoms data objects
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            diatoms_data_map = {data['image_url']: data for data in DIATOMS_DATA}
+            
+            for paper in PAPER_JSON_FILES:
+                paper_image_urls = paper.get("result", {}).get("paper_image_urls", [])
+                
+                for image_url in paper_image_urls:
+                    if image_url in diatoms_data_map:
+                        paper["diatoms_data"] = diatoms_data_map[image_url]
+                        break
+            
+            storage_client = self.get_storage_client()
+            bucket_name = json_url.split('/')[3]
+            blob_path = '/'.join(json_url.split('/')[4:])
+            
+            bucket = storage_client.bucket(bucket_name)
+            blob = bucket.blob(blob_path)
+            
+            json_content = json.dumps(PAPER_JSON_FILES, indent=2)
+            
+            blob.upload_from_string(
+                json_content,
+                content_type='application/json'
+            )
+            
+            print(f"Successfully updated and saved papers JSON to: {json_url}")
+            return True
+            
+        except Exception as e:
+            print(f"Error updating and saving papers: {str(e)}")
+            return False
 
     # Prompt Generation Methods
     @staticmethod
-    def part0_get_citation_info_for_paper() -> str:
+    def part0_get_citation_info_for_paper():
         """
         Creates a structured prompt for Claude to process citation information.
         Returns a string containing the prompt with instructions and expected JSON structure.
@@ -207,6 +287,23 @@ class ClaudeAI:
             "formatted_citation": "Complete formatted citation string"
         }
 
+        Example:
+        {
+            "authors": ["S.R. Stidolph", "F.A.S. Sterrenburg", "K.E.L. Smith", "A. Kraberg"],
+            "year": "2012",
+            "title": "Stuart R. Stidolph Diatom Atlas",
+            "type": "report",
+            "journal_name": "",
+            "journal_volume": "",
+            "journal_issue": "",
+            "journal_pages": "199",
+            "org_name": "U.S. Geological Survey",
+            "org_report_number": "Open-File Report 2012-1163",
+            "digital_doi": "",
+            "digital_url": "http://pubs.usgs.gov/of/2012/1163/",
+            "formatted_citation": "Stidolph, S.R., Sterrenburg, F.A.S., Smith, K.E.L., Kraberg, A., 2012, Stuart R. Stidolph Diatom Atlas: U.S. Geological Survey Open-File Report 2012-1163, 199 p., available at http://pubs.usgs.gov/of/2012/1163/"
+        }
+
         Important instructions:
         1. Extract all information exactly as presented in the source text
         2. Use proper citation formatting for author names (Last, First M.)
@@ -220,7 +317,7 @@ class ClaudeAI:
         return prompt
 
     @staticmethod
-    def part1_create_paper_info_json_from_pdf_text_content_prompt() -> str:
+    def part1_create_paper_info_json_from_pdf_text_content_prompt():
         """
         Create a structured prompt for processing diatom data.
 
@@ -240,7 +337,6 @@ class ClaudeAI:
             "source_material_received_from": "Hans van den Heuvel, Leiden",
             "source_material_date_received": "March 17th, 1988",
             "source_material_note": "Material also deposited in Rijksherbarium Leiden, the Netherlands. Aliquot sample and slide also in collection Sterrenburg, Nr. 249.",
-            "paper_image_urls": ["Array of image URLs from the paper"],
             "diatom_species_array": [
                 {
                     "species_index": 65,
@@ -277,8 +373,7 @@ class ClaudeAI:
         """
 
     @staticmethod
-    def part1_create_messages_for_paper_info_json(pdf_text_content: str, 
-                                                prompt: str) -> List[Dict[str, Any]]:
+    def part1_create_messages_for_paper_info_json(pdf_text_content, prompt):
         """
         Create the message array for the Claude API request.
 
@@ -306,7 +401,7 @@ class ClaudeAI:
         ]
 
     @staticmethod
-    def part2_create_diatoms_data_object_for_paper() -> str:
+    def part2_create_diatoms_data_object_for_paper():
         """
         Create a structured prompt for processing diatom data.
 
@@ -344,10 +439,7 @@ class ClaudeAI:
         """
 
     @staticmethod
-    def part2_create_messages_for_diatoms_data_object_creation(
-            paper_info: Dict[str, Any],
-            paper_image_urls: List[str],
-            prompt: str) -> List[Dict[str, Any]]:
+    def part2_create_messages_for_diatoms_data_object_creation(paper_info, paper_image_urls, prompt):
         """
         Create the message array for the Claude API request.
 
@@ -378,9 +470,10 @@ class ClaudeAI:
                 ]
             }
         ]
-
-    @staticmethod
-    def get_default_citation() -> Dict[str, str]:
+        
+         
+    @staticmethod        
+    def get_default_citation():
         """
         Returns a dictionary containing default citation information for the Stidolph Diatom Atlas.
         This serves as both an example and a fallback data structure.
@@ -402,7 +495,7 @@ class ClaudeAI:
         }
   
     @staticmethod
-    def extract_citation(first_two_pages_text: str, method: str = "default_citation") -> Dict[str, Any]:
+    def extract_citation(first_two_pages_text: str, method: str = "default_citation") -> Dict[str, str]:
         """
         Extract citation information from the first two pages of text using specified method.
         
@@ -436,98 +529,17 @@ class ClaudeAI:
             try:
                 # Get completion from Claude API using the instance method
                 citation_json = claude_instance.get_completion(messages)
-                return citation_json
+                
+                # Parse the JSON response
+                return json.loads(citation_json)
+                
+            except json.JSONDecodeError as e:
+                logger.error(f"Error parsing citation JSON: {str(e)}")
+                return ClaudeAI.get_default_citation()
                 
             except Exception as e:
-                logger.error(f"Error during citation extraction: {str(e)}")
+                logger.error(f"Error during API call or processing: {str(e)}")
                 return ClaudeAI.get_default_citation()
                     
         else:
             raise ValueError("Invalid method. Use 'default_citation' or 'citation_from_llm'")
-            
-    def get_diatoms_data(self, json_url: str) -> List[Dict[str, Any]]:
-        """
-        Load JSON data from URL and extract diatoms_data into an array.
-
-        Args:
-            json_url (str): URL of the JSON data
-
-        Returns:
-            list: Array of diatoms data objects
-        """
-        diatoms_data_array = []
-        
-        try:
-            response = requests.get(json_url)
-            response.raise_for_status()
-            paper_json_files = response.json()
-            
-            for paper in paper_json_files:
-                diatoms_data = paper.get("diatoms_data")
-                
-                if diatoms_data:
-                    if isinstance(diatoms_data, str):
-                        try:
-                            diatoms_data = json.loads(diatoms_data)
-                        except json.JSONDecodeError:
-                            logger.warning(f"Skipping invalid JSON in diatoms_data")
-                            continue
-                    
-                    diatoms_data_array.append(diatoms_data)
-            
-            logger.info(f"Successfully extracted diatoms data from {len(diatoms_data_array)} papers")
-            return diatoms_data_array
-            
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Error fetching data from URL: {str(e)}")
-        except json.JSONDecodeError as e:
-            logger.error(f"Error parsing JSON data: {str(e)}")
-        except Exception as e:
-            logger.error(f"Unexpected error: {str(e)}")
-        
-        return []
-
-    def update_and_save_papers(self, json_url: str, paper_json_files: List[Dict[str, Any]], 
-                             diatoms_data: List[Dict[str, Any]]) -> bool:
-        """
-        Update papers JSON with modified diatoms_data and save back to GCS.
-
-        Args:
-            json_url (str): URL where the JSON should be saved
-            paper_json_files (list): List of paper JSON objects
-            diatoms_data (list): List of diatoms data objects
-
-        Returns:
-            bool: True if successful, False otherwise
-        """
-        try:
-            diatoms_data_map = {data['image_url']: data for data in diatoms_data}
-            
-            for paper in paper_json_files:
-                paper_image_urls = paper.get("result", {}).get("paper_image_urls", [])
-                
-                for image_url in paper_image_urls:
-                    if image_url in diatoms_data_map:
-                        paper["diatoms_data"] = diatoms_data_map[image_url]
-                        break
-            
-            storage_client = self.get_storage_client()
-            bucket_name = json_url.split('/')[3]
-            blob_path = '/'.join(json_url.split('/')[4:])
-            
-            bucket = storage_client.bucket(bucket_name)
-            blob = bucket.blob(blob_path)
-            
-            json_content = json.dumps(paper_json_files, indent=2)
-            
-            blob.upload_from_string(
-                json_content,
-                content_type='application/json'
-            )
-            
-            logger.info(f"Successfully updated and saved papers JSON to: {json_url}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error updating and saving papers: {str(e)}")
-            return False

@@ -121,16 +121,16 @@ def process_pdfs(pdf_urls):
             extracted_images_file_metadata = pdf_ops.extract_images_and_metadata(url, SESSION_ID, BUCKET_EXTRACTED_IMAGES)
             
             # Get paper_info 
-            part1_prompt = claude.part1_create_paper_info_json_from_pdf_text_content_prompt()
-            part1_messages = claude.part1_create_messages_for_paper_info_json(full_text, part1_prompt)
-            paper_info = claude.get_completion(part1_messages)
-            time.sleep(10)
+            paper_info, diatoms_data = claude.process_paper(full_text)
+            # part1_prompt = claude.part1_create_paper_info_json_from_pdf_text_content_prompt()
+            # part1_messages = claude.part1_create_messages_for_paper_info_json(full_text, part1_prompt)
+            # paper_info = claude.get_completion(part1_messages)
+            # time.sleep(10)
             
-            paper_info_json = parse_output(paper_info)
+            # # paper_info_json = parse_output(paper_info)
             
-            paper_image_urls = paper_info_json.get("paper_image_urls", [])
+            # paper_image_urls = paper_info.get("paper_image_urls", [])
             
-            # paper_image_urls ="Testing Testing!!!" #  paper_info.get("paper_image_urls", [])
             # part2_prompt = claude.part2_create_diatoms_data_object_for_paper()
             # part2_messages =claude.part2_create_messages_for_diatoms_data_object_creation(paper_info, paper_image_urls, part2_prompt)
             # paper_diatoms_data = claude.get_completion(part2_messages)
@@ -149,7 +149,7 @@ def process_pdfs(pdf_urls):
                 "first_two_pages_text": safe_value(first_two_pages_text),
                 "paper_info": safe_value(paper_info),
                 "papers_json_public_url": safe_value(papers_json_public_url),
-                "diatoms_data": safe_value(paper_image_urls),
+                "diatoms_data": safe_value(diatoms_data),
                 "citation": safe_value(citation_info)
             }
             
@@ -162,7 +162,7 @@ def process_pdfs(pdf_urls):
             processing_status['extracted_images_file_metadata'] = json.dumps(extracted_images_file_metadata, indent=2)
             processing_status['pdf_paper_json'] = json.dumps(pdf_paper_json, indent=2)            
             processing_status['paper_info'] = json.dumps(paper_info, indent=2)                
-            processing_status['diatoms_data'] = paper_image_urls  
+            processing_status['diatoms_data'] = json.dumps(diatoms_data, indent=2)    
                         
         except Exception as e:
             print(f"Error processing PDF: {str(e)}")
