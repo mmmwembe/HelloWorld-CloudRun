@@ -508,7 +508,7 @@ class ClaudeAI:
         else:
             raise ValueError("Invalid method. Use 'default_citation' or 'citation_from_llm'")
             
-    def get_diatoms_data(self, json_url: str) -> List[Dict[str, Any]]:
+    def get_DIATOMS_DATA(self, json_url: str) -> List[Dict[str, Any]]:
         """
         Load JSON data from URL and extract diatoms_data into an array.
 
