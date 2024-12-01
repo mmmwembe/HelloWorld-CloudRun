@@ -55,6 +55,34 @@ def get_paper_image_urls(metadata):
     # Return the value of `paper_image_urls` or an empty list if the key is missing
     return metadata.get("paper_image_urls", [])
 
+def parse_output(output):
+    """
+    Parses a string containing JSON, stripping unnecessary prefixes or code fences.
+
+    Args:
+        output (str): The input string containing JSON.
+
+    Returns:
+        dict or None: The parsed JSON as a dictionary, or None if parsing fails.
+    """
+    stripped_output = output.strip("```").strip()
+
+    # Find the start of JSON content
+    start_idx = stripped_output.find("{")
+    if start_idx != -1:
+        stripped_output = stripped_output[start_idx:]
+
+    try:
+        output_dict = json.loads(stripped_output)
+        return output_dict
+    except json.JSONDecodeError as e:
+        print(f"Error parsing JSON output: {str(e)}")
+        print("Content:")
+        print(repr(stripped_output))  # Use repr to make debugging easier
+        return None
+
+
+
 processing_status = {
     'current_index': 0,
     'current_url': '',
@@ -98,7 +126,9 @@ def process_pdfs(pdf_urls):
             paper_info = claude.get_completion(part1_messages)
             time.sleep(10)
             
-            paper_image_urls = get_paper_image_urls(paper_info)
+            paper_info_json = parse_output(paper_info)
+            
+            paper_image_urls = paper_info_json.get("paper_image_urls", [])
             
             # paper_image_urls ="Testing Testing!!!" #  paper_info.get("paper_image_urls", [])
             # part2_prompt = claude.part2_create_diatoms_data_object_for_paper()
