@@ -102,9 +102,7 @@ class ClaudeAI:
                 
         logger.info(f"Found {len(paper_image_urls)} images and {len(species_array)} species")
         
-        # Create diatoms data for each image URL using species information
-        diatoms_data_array = []
-        
+
         # Set image_url to empty string if no URLs available
         try:
             image_url = paper_image_urls[0]
@@ -136,15 +134,13 @@ class ClaudeAI:
                 "image_height": "",
                 "info": info_array
             }
-            diatoms_data_array.append(diatom_data)
+            #diatoms_data_array.append(diatom_data)
         
         # Package the diatoms data
-        paper_diatoms_data = diatoms_data_array if diatoms_data_array else []
-        # paper_diatoms_data = {
-        #     "diatoms_data": diatoms_data_array
-        # } if diatoms_data_array else {}
+        paper_diatoms_data = diatom_data if diatom_data else {}
+
         
-        if not diatoms_data_array:
+        if not paper_diatoms_data:
             logger.warning("No diatoms data was generated")
             
         return paper_info, paper_diatoms_data, paper_image_urls
@@ -508,7 +504,8 @@ class ClaudeAI:
         else:
             raise ValueError("Invalid method. Use 'default_citation' or 'citation_from_llm'")
             
-    def get_DIATOMS_DATA(self, json_url: str) -> List[Dict[str, Any]]:
+    @staticmethod
+    def get_DIATOMS_DATA(json_url: str) -> List[Dict[str, Any]]:
         """
         Load JSON data from URL and extract diatoms_data into an array.
 
@@ -549,8 +546,9 @@ class ClaudeAI:
             logger.error(f"Unexpected error: {str(e)}")
         
         return []
-
-    def update_and_save_papers(self, json_url: str, paper_json_files: List[Dict[str, Any]], 
+    
+    @staticmethod
+    def update_and_save_papers(json_url: str, paper_json_files: List[Dict[str, Any]], 
                              diatoms_data: List[Dict[str, Any]]) -> bool:
         """
         Update papers JSON with modified diatoms_data and save back to GCS.
@@ -574,7 +572,9 @@ class ClaudeAI:
                         paper["diatoms_data"] = diatoms_data_map[image_url]
                         break
             
-            storage_client = self.get_storage_client()
+            # Create new ClaudeAI instance to access storage client
+            claude = ClaudeAI()
+            storage_client = claude.get_storage_client()
             bucket_name = json_url.split('/')[3]
             blob_path = '/'.join(json_url.split('/')[4:])
             
