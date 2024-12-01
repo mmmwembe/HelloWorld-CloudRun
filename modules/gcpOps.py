@@ -3,6 +3,7 @@ import json
 from google.cloud import storage
 from dotenv import load_dotenv
 import pandas as pd
+import requests
 
 class GCPOps:
     def __init__(self):
@@ -199,3 +200,21 @@ class GCPOps:
         except Exception as e:
             print(f"Error saving paper JSON files: {str(e)}")
             return ""
+        
+        
+        
+    def check_gcs_file_exists(url):
+        """
+        Check if a file exists in Google Cloud Storage using the public URL
+        
+        Args:
+            url (str): The public URL of the file
+            
+        Returns:
+            bool: True if file exists, False otherwise
+        """
+        try:
+            response = requests.head(url)
+            return response.status_code == 200
+        except requests.exceptions.RequestException:
+            return False        

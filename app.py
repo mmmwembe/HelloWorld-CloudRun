@@ -315,8 +315,10 @@ def see_diatoms_data():
             raise ValueError("Required configuration variables are not set")
         
         papers_json_public_url = f"https://storage.googleapis.com/{PAPERS_BUCKET_JSON_FILES}/jsons_from_pdfs/{SESSION_ID}/{SESSION_ID}.json"
-          
-        DIATOMS_DATA = ClaudeAI.get_DIATOMS_DATA(papers_json_public_url)
+        
+        if gcp_ops.check_gcs_file_exists(papers_json_public_url):
+            
+            DIATOMS_DATA = ClaudeAI.get_DIATOMS_DATA(papers_json_public_url)
         
         # Check if we got valid data
         if not DIATOMS_DATA:
