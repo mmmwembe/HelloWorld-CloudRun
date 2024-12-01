@@ -441,7 +441,9 @@ def download_labels():
 
 #________________________________Labelling_____________________________________________
 
-
+@app.route('/json')
+def display_json():
+    return render_template('displayjson.html')
 
 
 if __name__ == '__main__':
