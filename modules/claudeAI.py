@@ -66,15 +66,18 @@ class ClaudeAI:
         except Exception as e:
             return {"error": str(e)}
 
-    def process_paper(self, full_text: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    def process_paper(self, full_text: str) -> Tuple[Dict[str, Any], Dict[str, Any], List[str]]:
         """
-        Process a paper's full text to extract paper info and diatoms data.
+        Process a paper's full text to extract paper info, diatoms data, and image URLs.
         
         Args:
             full_text (str): The complete text content of the paper
             
         Returns:
-            tuple: (paper_info, paper_diatoms_data) as dictionaries
+            tuple: (paper_info, paper_diatoms_data, paper_image_urls)
+                - paper_info: Dictionary containing paper information
+                - paper_diatoms_data: Dictionary containing diatoms data
+                - paper_image_urls: List of image URLs from the paper
         """
         # Get paper info
         part1_prompt = self.part1_create_paper_info_json_from_pdf_text_content_prompt()
@@ -84,16 +87,38 @@ class ClaudeAI:
         # Extract image URLs
         paper_image_urls = paper_info.get("paper_image_urls", [])
         
-        # Get diatoms data
-        part2_prompt = self.part2_create_diatoms_data_object_for_paper()
-        part2_messages = self.part2_create_messages_for_diatoms_data_object_creation(
-            paper_info, 
-            paper_image_urls, 
-            part2_prompt
-        )
-        paper_diatoms_data = self.get_completion(part2_messages)
+        # Create diatoms data for each image URL using species information
+        diatoms_data_array = []
+        for image_url in paper_image_urls:
+            species_array = paper_info.get("diatom_species_array", [])
+            
+            info_array = []
+            for species in species_array:
+                info_entry = {
+                    "label": [f"{species['species_index']} {species['formatted_species_name']}"],
+                    "index": species['species_index'],
+                    "species": species['formatted_species_name'],
+                    "bbox": "",
+                    "yolo_bbox": "",
+                    "segmentation": "",
+                    "embeddings": ""
+                }
+                info_array.append(info_entry)
+            
+            diatom_data = {
+                "image_url": image_url,
+                "image_width": "",
+                "image_height": "",
+                "info": info_array
+            }
+            diatoms_data_array.append(diatom_data)
         
-        return paper_info, paper_diatoms_data
+        # Package the diatoms data
+        paper_diatoms_data = {
+            "diatoms_data": diatoms_data_array
+        }
+        
+        return paper_info, paper_diatoms_data, paper_image_urls
 
     # Storage Methods
     def get_storage_client(self):
@@ -260,6 +285,8 @@ class ClaudeAI:
                     "species_scale_bar_microns": "30",
                     "species_note": ""
                 }
+                
+                Repeat as necessary to get all the diatom species 
             ]
         }
 
@@ -318,27 +345,35 @@ class ClaudeAI:
         Return the data in the following JSON structure, maintaining strict adherence to the schema:
 
         {
-            "image_url": "get respective full url from paper_image_url for this dict",
-            "image_width": "",
-            "image_height": "",
-            "info": [
+            "diatoms_data": [
                 {
-                    "label": ["39 Amphora_obtusa_var_oceanica"],
-                    "index": 39,
-                    "species": "Amphora_obtusa_var_oceanica",
-                    "bbox": "",
-                    "yolo_bbox": "",
-                    "segmentation": "",
-                    "embeddings": ""
+                    "image_url": "URL from paper_image_urls",
+                    "image_width": "",
+                    "image_height": "",
+                    "info": [
+                        {
+                            "label": ["39 Amphora_obtusa_var_oceanica"],
+                            "index": 39,
+                            "species": "Amphora_obtusa_var_oceanica",
+                            "bbox": "",
+                            "yolo_bbox": "",
+                            "segmentation": "",
+                            "embeddings": ""
+                        }
+                        
+                        Repeat as necessary to get all the diatom species 
+                    ]
                 }
             ]
         }
 
         Important instructions:
-        1. Extract all information exactly as presented in the source text
-        2. Use index and formatted_species_name for label and formatted species for species
-        3. Leave empty strings for missing information rather than omitting fields
-        4. Ensure all JSON fields are properly quoted and formatted
+        1. Create a diatoms_data entry for each image URL in paper_image_urls
+        2. For each image, include ALL species from the diatom_species_array
+        3. Use species_index and formatted_species_name to create the label and species fields
+        4. Ensure image_url is properly set from paper_image_urls
+        5. Leave empty strings for missing information rather than omitting fields
+        6. Ensure all JSON fields are properly quoted and formatted
 
         Parse the provided information and return only the JSON object without any additional text or explanation.
         """

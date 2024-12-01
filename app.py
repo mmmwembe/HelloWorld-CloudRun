@@ -121,7 +121,7 @@ def process_pdfs(pdf_urls):
             extracted_images_file_metadata = pdf_ops.extract_images_and_metadata(url, SESSION_ID, BUCKET_EXTRACTED_IMAGES)
             
             # Get paper_info 
-            paper_info, diatoms_data = claude.process_paper(full_text)
+            paper_info, diatoms_data, paper_image_urls = claude.process_paper(full_text)
             # part1_prompt = claude.part1_create_paper_info_json_from_pdf_text_content_prompt()
             # part1_messages = claude.part1_create_messages_for_paper_info_json(full_text, part1_prompt)
             # paper_info = claude.get_completion(part1_messages)
