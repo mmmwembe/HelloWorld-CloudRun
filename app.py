@@ -112,7 +112,7 @@ def process_pdfs(pdf_urls):
             claude = ClaudeAI()
             
             papers_json_public_url = f"https://storage.googleapis.com/{PAPERS_BUCKET_JSON_FILES}/jsons_from_pdfs/{SESSION_ID}/{SESSION_ID}.json"
-        
+    
             # Load existing PAPER_JSON_FILES
             PAPER_JSON_FILES = gcp_ops.load_paper_json_files(papers_json_public_url)
             
@@ -122,18 +122,7 @@ def process_pdfs(pdf_urls):
             
             # Get paper_info 
             paper_info, diatoms_data, paper_image_urls = claude.process_paper(full_text,extracted_images_file_metadata)
-            # part1_prompt = claude.part1_create_paper_info_json_from_pdf_text_content_prompt()
-            # part1_messages = claude.part1_create_messages_for_paper_info_json(full_text, part1_prompt)
-            # paper_info = claude.get_completion(part1_messages)
-            # time.sleep(10)
-            
-            # # paper_info_json = parse_output(paper_info)
-            
-            # paper_image_urls = paper_info.get("paper_image_urls", [])
-            
-            # part2_prompt = claude.part2_create_diatoms_data_object_for_paper()
-            # part2_messages =claude.part2_create_messages_for_diatoms_data_object_creation(paper_info, paper_image_urls, part2_prompt)
-            # paper_diatoms_data = claude.get_completion(part2_messages)
+
             
             # Get citation info. Available methods: (a) "default_citation" - Returns predefined Stidolph Diatom Atlas citation
             # (b) "citation_from_llm": Uses Claude to extract citation from the text
@@ -152,6 +141,14 @@ def process_pdfs(pdf_urls):
                 "diatoms_data": safe_value(diatoms_data),
                 "citation": safe_value(citation_info)
             }
+            
+            
+                    # Check if paper already exists in PAPER_JSON_FILES
+            if not any(paper['pdf_file_url'] ==url for paper in PAPER_JSON_FILES):
+                PAPER_JSON_FILES.append(pdf_paper_json)
+                
+            # Save updated PAPER_JSON_FILES
+            papers_json_public_url = gcp_ops.save_paper_json_files(papers_json_public_url, PAPER_JSON_FILES)
             
             
             # Update processing status with new information
@@ -176,7 +173,7 @@ def process_pdfs(pdf_urls):
             processing_status['diatoms_data'] = 'Error generating diatoms_data'   
                         
         # Simulate processing time
-        time.sleep(10)
+        time.sleep(20)
     
     processing_status['complete'] = True
 
