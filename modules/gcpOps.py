@@ -339,6 +339,78 @@ class GCPOps:
 
     # Add these methods to the GCPOps class in gcpOps.py
 
+    # def save_segmentation_data(self, segmentation_data: str, image_filename: str, 
+    #                         session_id: str, bucket_name: str) -> Optional[str]:
+    #     """
+    #     Save segmentation data to a text file in GCS bucket.
+        
+    #     Args:
+    #         segmentation_data: String containing the segmentation data
+    #         image_filename: Base filename of the image being segmented
+    #         session_id: Current session ID
+    #         bucket_name: Name of the GCS bucket for segmentation data
+            
+    #     Returns:
+    #         Optional[str]: Public URL of the saved segmentation file, or None if error
+    #     """
+    #     try:
+    #         # Create temporary file
+    #         with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as temp_file:
+    #             temp_file.write(segmentation_data)
+    #             temp_path = temp_file.name
+                
+    #         try:
+    #             # Upload to GCS
+    #             bucket = self.storage_client.bucket(bucket_name)
+    #             blob_name = f"{session_id}/{image_filename}.txt"
+    #             blob = bucket.blob(blob_name)
+                
+    #             blob.upload_from_filename(temp_path)
+                
+    #             # Generate public URL
+    #             public_url = f"https://storage.googleapis.com/{bucket_name}/{blob_name}"
+    #             logger.info(f"Saved segmentation data to {public_url}")
+                
+    #             return public_url
+                
+    #         finally:
+    #             # Clean up temp file
+    #             if os.path.exists(temp_path):
+    #                 os.remove(temp_path)
+                    
+    #     except Exception as e:
+    #         logger.error(f"Error saving segmentation data: {str(e)}")
+    #         return None
+            
+    # def load_segmentation_data(self, segmentation_url: str) -> Optional[str]:
+    #     """
+    #     Load segmentation data from GCS.
+        
+    #     Args:
+    #         segmentation_url: Public URL of the segmentation file
+            
+    #     Returns:
+    #         Optional[str]: Content of the segmentation file, or None if error
+    #     """
+    #     try:
+    #         bucket_name = segmentation_url.split('/')[3]
+    #         blob_path = '/'.join(segmentation_url.split('/')[4:])
+            
+    #         bucket = self.storage_client.bucket(bucket_name)
+    #         blob = bucket.blob(blob_path)
+            
+    #         if blob.exists():
+    #             return blob.download_as_string().decode('utf-8')
+    #         else:
+    #             logger.warning(f"No segmentation file found at {segmentation_url}")
+    #             return None
+                
+    #     except Exception as e:
+    #         logger.error(f"Error loading segmentation data: {str(e)}")
+    #         return None
+
+
+
     def save_segmentation_data(self, segmentation_data: str, image_filename: str, 
                             session_id: str, bucket_name: str) -> Optional[str]:
         """

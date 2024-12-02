@@ -473,16 +473,15 @@ def download_labels():
     
 #-----------------------------------------SEGMENTATION--------------------------------------------------------------------
 
-# Add these routes to app.py
-
 @app.route('/segmentation')
 def segmentation():
     """Route for the segmentation labeling interface"""
-    global DIATOMS_DATA
+    global DIATOMS_DATA  # Add this line to fix the global reference
     
     try:
         if not DIATOMS_DATA:
             try:
+                # Try to reload the data
                 DIATOMS_DATA = ClaudeAI.get_DIATOMS_DATA(PAPERS_JSON_PUBLIC_URL)
             except Exception as e:
                 app.logger.error(f"Error loading diatoms data: {str(e)}")
@@ -494,6 +493,8 @@ def segmentation():
     except Exception as e:
         app.logger.error(f"Error in segmentation route: {str(e)}")
         return render_template('error.html', error=str(e)), 500
+
+# Update these routes in app.py
 
 @app.route('/api/save_segmentation', methods=['POST'])
 def save_segmentation():

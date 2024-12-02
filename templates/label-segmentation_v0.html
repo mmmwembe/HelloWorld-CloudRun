@@ -108,7 +108,6 @@
             const [showToast, setShowToast] = React.useState(false);
             const [selectedType, setSelectedType] = React.useState(2);
             const [imageData, setImageData] = React.useState(null);
-            const [pendingSegmentationData, setPendingSegmentationData] = React.useState(null);
             
             const canvasRef = React.useRef(null);
             const imageRef = React.useRef(null);
@@ -117,34 +116,6 @@
             const getRandomColor = () => {
                 const colors = ['#2ecc71', '#e74c3c', '#3498db', '#f1c40f', '#9b59b6', '#1abc9c'];
                 return colors[Math.floor(Math.random() * colors.length)];
-            };
-
-            const parseSegmentationFile = (content, imageWidth, imageHeight) => {
-                if (!content.trim()) return [];
-                
-                console.log('Parsing segmentation file with dimensions:', imageWidth, imageHeight);
-                
-                const lines = content.trim().split('\n');
-                return lines.map(line => {
-                    const [label, ...coords] = line.split(' ');
-                    const points = [];
-                    for (let i = 0; i < coords.length; i += 2) {
-                        if (coords[i] && coords[i+1]) {
-                            const x = parseFloat(coords[i]);
-                            const y = parseFloat(coords[i + 1]);
-                            // Convert normalized coordinates back to pixel coordinates
-                            points.push({
-                                x: x * imageWidth,
-                                y: y * imageHeight
-                            });
-                        }
-                    }
-                    return {
-                        label: parseInt(label),
-                        points,
-                        color: getRandomColor()
-                    };
-                }).filter(polygon => polygon.points.length >= 3);
             };
 
             const loadImageData = async (index) => {
@@ -160,74 +131,65 @@
                     setTotalImages(data.total_images);
                     setImageIndex(data.current_index);
                     
-                    // If there's segmentation data, store it to be processed after image loads
+                    // Load existing polygons if available
                     if (data.data.segmentation_url) {
                         try {
                             const segResponse = await fetch(data.data.segmentation_url);
-                            if (!segResponse.ok) {
-                                throw new Error('Failed to fetch segmentation data');
-                            }
                             const segText = await segResponse.text();
-                            setPendingSegmentationData(segText);
+                            const loadedPolygons = parseSegmentationFile(segText);
+                            setPolygons(loadedPolygons);
                         } catch (error) {
                             console.error('Error loading segmentation data:', error);
-                            setPendingSegmentationData(null);
                             setPolygons([]);
                         }
                     } else {
-                        setPendingSegmentationData(null);
                         setPolygons([]);
                     }
                 } catch (error) {
                     console.error('Error loading image data:', error);
                 }
             };
-            const handleImageLoad = () => {
-                const canvas = canvasRef.current;
-                const container = containerRef.current;
-                const image = imageRef.current;
-                
-                if (canvas && container && image) {
-                    canvas.width = container.offsetWidth;
-                    canvas.height = container.offsetHeight;
-                    
-                    // Now that image is loaded, process any pending segmentation data
-                    if (pendingSegmentationData) {
-                        console.log('Processing pending segmentation data');
-                        const loadedPolygons = parseSegmentationFile(
-                            pendingSegmentationData,
-                            image.naturalWidth,
-                            image.naturalHeight
-                        );
-                        console.log('Loaded polygons:', loadedPolygons);
-                        setPolygons(loadedPolygons);
-                        setPendingSegmentationData(null);
+
+            const parseSegmentationFile = (content) => {
+                const lines = content.trim().split('\n');
+                return lines.map(line => {
+                    const [label, ...coords] = line.split(' ');
+                    const points = [];
+                    for (let i = 0; i < coords.length; i += 2) {
+                        points.push({
+                            x: parseFloat(coords[i]) * imageRef.current.width,
+                            y: parseFloat(coords[i + 1]) * imageRef.current.height
+                        });
                     }
-                    
-                    drawPolygons();
-                }
+                    return {
+                        label: parseInt(label),
+                        points,
+                        color: getRandomColor()
+                    };
+                });
+            };
+
+            React.useEffect(() => {
+                loadImageData(imageIndex);
+            }, [imageIndex]);
+
+            const handlePrevious = () => {
+                setImageIndex(prev => Math.max(0, prev - 1));
+            };
+
+            const handleNext = () => {
+                setImageIndex(prev => Math.min(totalImages - 1, prev + 1));
             };
 
             const generateSegmentationText = () => {
-                const image = imageRef.current;
-                if (!image) return '';
-                
-                const imageWidth = image.naturalWidth;
-                const imageHeight = image.naturalHeight;
-                
-                console.log('Generating segmentation text with dimensions:', imageWidth, imageHeight);
-                
                 return polygons.map(polygon => {
-                    if (polygon.points.length < 3) return ''; // Skip invalid polygons
-                    
                     const normalizedPoints = polygon.points.map(point => {
-                        // Normalize coordinates to [0,1] range using natural dimensions
-                        const normalizedX = point.x / imageWidth;
-                        const normalizedY = point.y / imageHeight;
+                        const normalizedX = point.x / imageRef.current.width;
+                        const normalizedY = point.y / imageRef.current.height;
                         return `${normalizedX.toFixed(6)} ${normalizedY.toFixed(6)}`;
                     }).join(' ');
                     return `${polygon.label} ${normalizedPoints}`;
-                }).filter(Boolean).join('\n');
+                }).join('\n');
             };
 
             const handleSave = async () => {
@@ -240,8 +202,6 @@
 
                 try {
                     const segmentationText = generateSegmentationText();
-                    console.log('Saving segmentation text:', segmentationText);
-                    
                     const imageFileName = imageUrl.split('/').pop().replace(/\.[^/.]+$/, '');
                     
                     const response = await fetch('/api/save_segmentation', {
@@ -257,37 +217,28 @@
                     });
                     
                     const data = await response.json();
-                    console.log('Save response:', data);
                     
                     clearInterval(progressInterval);
                     setSaveProgress(100);
                     
                     if (data.success) {
                         setShowToast(true);
+                        // Update imageData with new segmentation_url
                         setImageData(prev => ({
                             ...prev,
                             segmentation_url: data.segmentation_url
                         }));
                     } else {
-                        throw new Error(data.error || 'Failed to save segmentation');
+                        throw new Error(data.error);
                     }
                 } catch (error) {
                     console.error('Error saving data:', error);
-                    alert('Failed to save segmentation: ' + error.message);
                 } finally {
                     setTimeout(() => {
                         setIsSaving(false);
                         setSaveProgress(0);
                     }, 500);
                 }
-            };
-
-            const handlePrevious = () => {
-                setImageIndex(prev => Math.max(0, prev - 1));
-            };
-
-            const handleNext = () => {
-                setImageIndex(prev => Math.min(totalImages - 1, prev + 1));
             };
 
             const drawPolygons = () => {
@@ -334,6 +285,16 @@
                 }
             };
 
+            const handleImageLoad = () => {
+                const canvas = canvasRef.current;
+                const container = containerRef.current;
+                if (canvas && container) {
+                    canvas.width = container.offsetWidth;
+                    canvas.height = container.offsetHeight;
+                    drawPolygons();
+                }
+            };
+
             const handleCanvasClick = (e) => {
                 const rect = canvasRef.current.getBoundingClientRect();
                 const x = e.clientX - rect.left;
@@ -365,6 +326,7 @@
                     }
                 }
             };
+
             const handleMouseMove = (e) => {
                 if (!isDrawing) return;
                 drawPolygons();
@@ -384,16 +346,6 @@
                     document.removeEventListener('keydown', handleKeyPress);
                 };
             }, [isDrawing]);
-
-            React.useEffect(() => {
-                loadImageData(imageIndex);
-            }, [imageIndex]);
-
-            React.useEffect(() => {
-                if (pendingSegmentationData && imageRef.current) {
-                    handleImageLoad();
-                }
-            }, [pendingSegmentationData]);
 
             React.useEffect(() => {
                 drawPolygons();
