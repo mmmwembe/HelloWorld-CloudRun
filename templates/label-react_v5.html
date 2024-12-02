@@ -96,14 +96,6 @@
             );
         }
 
-        const generateYoloBbox = (diatom_selector_value, x1, y1, x2, y2, image_width, image_height) => {
-            const x_center = (x1 + x2) / (2 * image_width);
-            const y_center = (y1 + y2) / (2 * image_height);
-            const width = (x2 - x1) / image_width;
-            const height = (y2 - y1) / image_height;
-            return `${diatom_selector_value} ${x_center.toFixed(6)} ${y_center.toFixed(6)} ${width.toFixed(6)} ${height.toFixed(6)}`;
-        };
-
         function DiatomLabeler() {
             const [imageIndex, setImageIndex] = React.useState(0);
             const [totalImages, setTotalImages] = React.useState(0);
@@ -141,8 +133,7 @@
                         bboxes: d.bbox ? 
                             d.bbox.split(';').map(bbox => ({
                                 bbox,
-                                color: getRandomColor(),
-                                yolo_bbox: ''  // Will be populated when drawn
+                                color: getRandomColor()
                             })) : []
                     })));
                     setTotalImages(data.total_images);
@@ -176,7 +167,6 @@
                     const dataToSave = diatoms.map(d => ({
                         ...d,
                         bbox: d.bboxes.map(b => b.bbox).join(';'),
-                        yolo_bbox: d.bboxes.map(b => b.yolo_bbox).join(';'),
                         bboxes: undefined
                     }));
 
@@ -291,22 +281,11 @@
                     const newBbox = `${currentBox.x},${currentBox.y},${currentBox.x + currentBox.width},${currentBox.y + currentBox.height}`;
                     const newColor = getRandomColor();
                     
-                    // Generate YOLO bbox
-                    const yolo_bbox = generateYoloBbox(
-                        selectedType,
-                        currentBox.x,
-                        currentBox.y,
-                        currentBox.x + currentBox.width,
-                        currentBox.y + currentBox.height,
-                        imageRef.current.naturalWidth,
-                        imageRef.current.naturalHeight
-                    );
-                    
                     const updatedDiatoms = diatoms.map(d => 
                         d.label[0] === selectedDiatom.label[0] 
                             ? {
                                 ...d,
-                                bboxes: [...d.bboxes, { bbox: newBbox, yolo_bbox, color: newColor }]
+                                bboxes: [...d.bboxes, { bbox: newBbox, color: newColor }]
                             }
                             : d
                     );
@@ -314,7 +293,7 @@
                     
                     setSelectedDiatom(prev => ({
                         ...prev,
-                        bboxes: [...prev.bboxes, { bbox: newBbox, yolo_bbox, color: newColor }]
+                        bboxes: [...prev.bboxes, { bbox: newBbox, color: newColor }]
                     }));
                 }
                 setCurrentBox(null);
@@ -384,7 +363,7 @@
                                 ref={containerRef}
                                 className="relative w-full max-w-4xl mt-4"
                             >
-                                <img
+                            <img
                                     ref={imageRef}
                                     src={imageUrl}
                                     alt="Diatom"
