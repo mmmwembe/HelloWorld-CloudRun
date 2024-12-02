@@ -1,9 +1,18 @@
 import os
 import json
+import logging
 from google.cloud import storage
 from dotenv import load_dotenv
 import pandas as pd
 import requests
+from typing import List, Dict, Any, Optional, Union
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 class GCPOps:
     def __init__(self):
@@ -12,47 +21,53 @@ class GCPOps:
         
         # Get the Google service account JSON from environment variable
         self.secret_json = os.getenv('GOOGLE_SECRET_JSON')
-        self.storage_client = storage.Client.from_service_account_info(
-            json.loads(self.secret_json)
-        )
+        try:
+            self.storage_client = storage.Client.from_service_account_info(
+                json.loads(self.secret_json)
+            )
+        except Exception as e:
+            logger.error(f"Failed to initialize GCP storage client: {str(e)}")
+            raise
 
-    def save_file_to_bucket(self, artifact_url, session_id, bucket_name, subdir="papers", 
-                          subsubdirs=["pdf","word","images","csv","text"]):
+    def save_file_to_bucket(self, artifact_url: str, session_id: str, bucket_name: str, 
+                          subdir: str = "papers", 
+                          subsubdirs: List[str] = ["pdf","word","images","csv","text"]) -> Optional[str]:
         """
         Save a file to a GCP bucket with appropriate subdirectory structure.
         """
-        # Determine the subsubdir based on the file extension
-        if artifact_url.endswith(".docx"):
-            subsubdir = "word"
-        elif artifact_url.endswith((".jpg", ".jpeg", ".png", ".gif")):
-            subsubdir = "images"
-        elif artifact_url.endswith(".csv"):
-            subsubdir = "csv"
-        elif artifact_url.endswith((".txt", ".text")):
-            subsubdir = "text"
-        else:
-            subsubdir = "pdf"  # Default to PDF if no other match
-
-        bucket = self.storage_client.bucket(bucket_name)
-
-        if subsubdir == "word":
-            # Delete the contents of the subsubdir before uploading the new file
-            blob_prefix = f"{session_id}/{subdir}/{subsubdir}/"
-            blobs = self.storage_client.list_blobs(bucket, prefix=blob_prefix)
-            for blob in blobs:
-                blob.delete()
-
         try:
+            # Determine the subsubdir based on the file extension
+            if artifact_url.endswith(".docx"):
+                subsubdir = "word"
+            elif artifact_url.endswith((".jpg", ".jpeg", ".png", ".gif")):
+                subsubdir = "images"
+            elif artifact_url.endswith(".csv"):
+                subsubdir = "csv"
+            elif artifact_url.endswith((".txt", ".text")):
+                subsubdir = "text"
+            else:
+                subsubdir = "pdf"  # Default to PDF if no other match
+
+            bucket = self.storage_client.bucket(bucket_name)
+
+            if subsubdir == "word":
+                # Delete the contents of the subsubdir before uploading the new file
+                blob_prefix = f"{session_id}/{subdir}/{subsubdir}/"
+                blobs = self.storage_client.list_blobs(bucket, prefix=blob_prefix)
+                for blob in blobs:
+                    blob.delete()
+
             # Upload the file to Google Cloud Storage
             blob_name = f"{session_id}/{subdir}/{subsubdir}/{os.path.basename(artifact_url)}"
             blob = bucket.blob(blob_name)
             blob.upload_from_filename(artifact_url)
             return blob.public_url
+            
         except Exception as e:
-            print("An error occurred:", e)
+            logger.error(f"Error saving file to bucket: {str(e)}")
             return None
 
-    def save_tracker_csv(self, df, session_id, bucket_name):
+    def save_tracker_csv(self, df: pd.DataFrame, session_id: str, bucket_name: str) -> Optional[str]:
         """
         Save a pandas DataFrame as a CSV to the specified GCS bucket.
         """
@@ -64,27 +79,24 @@ class GCPOps:
             # Save DataFrame to temporary CSV
             df.to_csv(temp_csv_path, index=False)
             
-            # Use save_file_to_bucket to upload the CSV
-            url = self.save_file_to_bucket(
-                artifact_url=temp_csv_path,
-                session_id=session_id,
-                bucket_name=bucket_name
-            )
-            
-            # Clean up temporary file
-            if os.path.exists(temp_csv_path):
-                os.remove(temp_csv_path)
-                
-            return url
+            try:
+                # Use save_file_to_bucket to upload the CSV
+                url = self.save_file_to_bucket(
+                    artifact_url=temp_csv_path,
+                    session_id=session_id,
+                    bucket_name=bucket_name
+                )
+                return url
+            finally:
+                # Clean up temporary file
+                if os.path.exists(temp_csv_path):
+                    os.remove(temp_csv_path)
             
         except Exception as e:
-            print(f"Error saving tracker CSV: {str(e)}")
-            # Clean up temporary file in case of error
-            if os.path.exists(temp_csv_path):
-                os.remove(temp_csv_path)
+            logger.error(f"Error saving tracker CSV: {str(e)}")
             return None
 
-    def initialize_paper_upload_tracker_df_from_gcp(self, session_id, bucket_name):
+    def initialize_paper_upload_tracker_df_from_gcp(self, session_id: str, bucket_name: str) -> pd.DataFrame:
         """
         Initialize a pandas DataFrame from a CSV file stored in GCS.
         """
@@ -94,10 +106,11 @@ class GCPOps:
             
             # Read directly from URL
             df = pd.read_csv(gcs_url)
+            logger.info(f"Successfully loaded tracker DataFrame with {len(df)} rows")
             return df
             
         except Exception as e:
-            print(f"Error initializing DataFrame from GCS: {str(e)}")
+            logger.error(f"Error initializing DataFrame from GCS: {str(e)}")
             # If file doesn't exist or other error, return empty DataFrame with default columns
             return pd.DataFrame(columns=[
                 'gcp_public_url',
@@ -113,59 +126,47 @@ class GCPOps:
                 'processed',
             ])
 
-    def get_public_urls(self, bucket_name, session_id, file_hash_num):
+    def get_public_urls(self, bucket_name: str, session_id: str, file_hash_num: str) -> List[str]:
         """
         Get public URLs for all files in a specific bucket path.
         """
-        bucket = self.storage_client.bucket(bucket_name)
-        blobs = bucket.list_blobs(prefix=f"{session_id}/{file_hash_num}/")
-        return [f"https://storage.googleapis.com/{bucket_name}/{blob.name}" for blob in blobs]
+        try:
+            bucket = self.storage_client.bucket(bucket_name)
+            blobs = bucket.list_blobs(prefix=f"{session_id}/{file_hash_num}/")
+            return [f"https://storage.googleapis.com/{bucket_name}/{blob.name}" for blob in blobs]
+        except Exception as e:
+            logger.error(f"Error getting public URLs: {str(e)}")
+            return []
 
-    def get_public_urls_with_metadata(self, bucket_name, session_id, file_hash_num):
+    def get_public_urls_with_metadata(self, bucket_name: str, session_id: str, 
+                                    file_hash_num: str) -> List[Dict[str, Any]]:
         """
         Get public URLs and metadata for all files in a specific bucket path.
         """
-        bucket = self.storage_client.bucket(bucket_name)
-        blobs = bucket.list_blobs(prefix=f"{session_id}/{file_hash_num}/")
-        
-        files = []
-        for blob in blobs:
-            file_info = {
-                'name': blob.name.split('/')[-1],  # File name
-                'blob_name': blob.name,  # Full blob name
-                'size': f"{blob.size / 1024 / 1024:.2f} MB",  # Size in MB
-                'updated': blob.updated.strftime('%Y-%m-%d %H:%M:%S'),  # Last updated timestamp
-                'public_url': f"https://storage.googleapis.com/{bucket_name}/{blob.name}"  # Public URL
-            }
-            files.append(file_info)
-        
-        return files
-
-    def save_json_to_bucket(self, local_file_path, bucket_name, session_id):
-        """
-        Save a local JSON file to a GCP bucket.
-        """
         try:
             bucket = self.storage_client.bucket(bucket_name)
-
-            # Create the full path in the bucket
-            blob_name = f"labels/{session_id}/{session_id}.json"
-            blob = bucket.blob(blob_name)
-
-            # Upload the file
-            blob.upload_from_filename(local_file_path)
-
-            # Generate the public URL
-            public_url = f"https://storage.googleapis.com/{bucket_name}/{blob_name}"
-
-            return public_url
+            blobs = bucket.list_blobs(prefix=f"{session_id}/{file_hash_num}/")
+            
+            files = []
+            for blob in blobs:
+                file_info = {
+                    'name': blob.name.split('/')[-1],  # File name
+                    'blob_name': blob.name,  # Full blob name
+                    'size': f"{blob.size / 1024 / 1024:.2f} MB",  # Size in MB
+                    'updated': blob.updated.strftime('%Y-%m-%d %H:%M:%S'),  # Last updated timestamp
+                    'public_url': f"https://storage.googleapis.com/{bucket_name}/{blob.name}"  # Public URL
+                }
+                files.append(file_info)
+            
+            return files
+            
         except Exception as e:
-            print(f"Error uploading file to bucket '{bucket_name}': {e}")
-            return None
+            logger.error(f"Error getting public URLs with metadata: {str(e)}")
+            return []
 
-    def load_paper_json_files(self, papers_json_public_url):
+    def load_paper_json_files(self, papers_json_public_url: str) -> List[Dict[str, Any]]:
         """
-        Load existing paper JSON files from GCS.
+        Load existing paper JSON files from GCS with enhanced error handling and validation.
         """
         try:
             bucket_name = papers_json_public_url.split('/')[3]
@@ -176,45 +177,161 @@ class GCPOps:
             
             if blob.exists():
                 content = blob.download_as_string()
-                return json.loads(content)
+                data = json.loads(content)
+                
+                # Validate and process each paper's data
+                processed_data = []
+                for paper in data:
+                    if isinstance(paper.get('diatoms_data'), str):
+                        try:
+                            paper['diatoms_data'] = json.loads(paper['diatoms_data'])
+                        except json.JSONDecodeError:
+                            logger.warning(f"Skipping paper with invalid diatoms_data JSON")
+                            continue
+                    processed_data.append(paper)
+                
+                logger.info(f"Successfully loaded {len(processed_data)} papers from GCS")
+                return processed_data
+            else:
+                logger.warning(f"No file found at {papers_json_public_url}")
+                return []
+                
         except Exception as e:
-            print(f"Error loading paper JSON files: {str(e)}")
-        return []
+            logger.error(f"Error loading paper JSON files: {str(e)}")
+            return []
 
-    def save_paper_json_files(self, papers_json_public_url, paper_json_files):
+    def save_paper_json_files(self, papers_json_public_url: str, 
+                            paper_json_files: List[Dict[str, Any]]) -> str:
         """
-        Save paper JSON files to GCS.
+        Save paper JSON files to GCS with enhanced error handling and validation.
         """
         try:
+            # Validate and process input data
+            processed_files = []
+            for paper in paper_json_files:
+                # Ensure diatoms_data is properly formatted
+                if isinstance(paper.get('diatoms_data'), str):
+                    try:
+                        paper['diatoms_data'] = json.loads(paper['diatoms_data'])
+                    except json.JSONDecodeError:
+                        logger.warning(f"Skipping paper with invalid diatoms_data JSON")
+                        continue
+                processed_files.append(paper)
+            
             bucket_name = papers_json_public_url.split('/')[3]
             blob_path = '/'.join(papers_json_public_url.split('/')[4:])
             
             bucket = self.storage_client.bucket(bucket_name)
             blob = bucket.blob(blob_path)
             
+            # Save with proper formatting and content type
+            json_content = json.dumps(processed_files, indent=2)
             blob.upload_from_string(
-                json.dumps(paper_json_files),
+                json_content,
                 content_type='application/json'
             )
-            return papers_json_public_url
-        except Exception as e:
-            print(f"Error saving paper JSON files: {str(e)}")
-            return ""
-        
-        
-        
-    def check_gcs_file_exists(url):
-        """
-        Check if a file exists in Google Cloud Storage using the public URL
-        
-        Args:
-            url (str): The public URL of the file
             
-        Returns:
-            bool: True if file exists, False otherwise
+            logger.info(f"Successfully saved {len(processed_files)} papers to GCS")
+            return papers_json_public_url
+            
+        except Exception as e:
+            logger.error(f"Error saving paper JSON files: {str(e)}")
+            return ""
+
+    def save_json_to_bucket(self, local_file_path: str, bucket_name: str, 
+                          session_id: str) -> Optional[str]:
+        """
+        Save a local JSON file to a GCP bucket with validation.
         """
         try:
-            response = requests.head(url)
+            # Validate input JSON
+            with open(local_file_path, 'r') as f:
+                data = json.load(f)  # This will raise JSONDecodeError if invalid
+            
+            bucket = self.storage_client.bucket(bucket_name)
+            blob_name = f"labels/{session_id}/{session_id}.json"
+            blob = bucket.blob(blob_name)
+
+            blob.upload_from_filename(local_file_path)
+            public_url = f"https://storage.googleapis.com/{bucket_name}/{blob_name}"
+            
+            logger.info(f"Successfully saved JSON to {public_url}")
+            return public_url
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in file {local_file_path}: {str(e)}")
+            return None
+        except Exception as e:
+            logger.error(f"Error saving JSON to bucket: {str(e)}")
+            return None
+
+    @staticmethod
+    def check_gcs_file_exists(url: str) -> bool:
+        """
+        Check if a file exists in Google Cloud Storage using the public URL.
+        """
+        try:
+            response = requests.head(url, timeout=10)
             return response.status_code == 200
-        except requests.exceptions.RequestException:
-            return False        
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error checking file existence: {str(e)}")
+            return False
+
+    def validate_and_process_paper_json(self, paper_json: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Validate and process a paper JSON object to ensure proper format.
+        """
+        try:
+            # Ensure diatoms_data is a dictionary
+            if isinstance(paper_json.get('diatoms_data'), str):
+                paper_json['diatoms_data'] = json.loads(paper_json['diatoms_data'])
+            
+            # Ensure required fields exist
+            required_fields = ['image_url', 'info']
+            if not all(field in paper_json['diatoms_data'] for field in required_fields):
+                raise ValueError("Missing required fields in diatoms_data")
+            
+            # Validate info array
+            for info in paper_json['diatoms_data']['info']:
+                if not isinstance(info.get('label'), list):
+                    info['label'] = [str(info.get('label', ''))]
+                
+                # Ensure bbox and yolo_bbox are strings
+                info['bbox'] = str(info.get('bbox', ''))
+                info['yolo_bbox'] = str(info.get('yolo_bbox', ''))
+            
+            return paper_json
+            
+        except Exception as e:
+            logger.error(f"Error validating paper JSON: {str(e)}")
+            raise
+
+    def sync_paper_json_files(self, papers_json_public_url: str, 
+                            updated_data: Dict[str, Any], 
+                            image_index: int) -> bool:
+        """
+        Synchronize updated paper JSON files with GCS storage.
+        """
+        try:
+            # Load existing files
+            paper_json_files = self.load_paper_json_files(papers_json_public_url)
+            
+            # Update the specific paper's data
+            for paper in paper_json_files:
+                if isinstance(paper.get('diatoms_data'), str):
+                    paper['diatoms_data'] = json.loads(paper['diatoms_data'])
+                
+                current_data = paper.get('diatoms_data', {})
+                if current_data.get('image_url') == updated_data.get('image_url'):
+                    paper['diatoms_data'] = self.validate_and_process_paper_json({
+                        'diatoms_data': updated_data
+                    })['diatoms_data']
+                    break
+            
+            # Save updated files
+            result_url = self.save_paper_json_files(papers_json_public_url, paper_json_files)
+            return bool(result_url)
+            
+        except Exception as e:
+            logger.error(f"Error syncing paper JSON files: {str(e)}")
+            return False  

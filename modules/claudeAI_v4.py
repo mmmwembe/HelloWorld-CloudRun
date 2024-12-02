@@ -1,3 +1,10 @@
+"""
+Claude AI Integration Script for Processing Diatom Research Papers
+
+This script provides functionality to interact with the Claude API for processing
+scientific papers about diatoms, managing storage in Google Cloud Storage, and
+handling various data processing tasks.
+"""
 from anthropic import Anthropic
 from google.cloud import storage
 import logging
@@ -30,6 +37,7 @@ class ClaudeAI:
         self.client = Anthropic(api_key=self.CLAUDE_API_KEY)
         self.MODEL_NAME = "claude-3-5-sonnet-20241022"
 
+    # Core API Methods
     def get_completion(self, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         Send a request to Claude API and return the completion.
@@ -56,6 +64,7 @@ class ClaudeAI:
 
         except Exception as e:
             return {"error": str(e)}
+        
 
     def process_paper(self, full_text: str, extracted_images_file_metadata: Dict) -> Tuple[Dict[str, Any], Dict[str, Any], List[str]]:
         """
@@ -92,6 +101,7 @@ class ClaudeAI:
             logger.warning("No image URLs found in extracted_images_file_metadata")
                 
         logger.info(f"Found {len(paper_image_urls)} images and {len(species_array)} species")
+        
 
         # Set image_url to empty string if no URLs available
         try:
@@ -124,15 +134,19 @@ class ClaudeAI:
                 "image_height": "",
                 "info": info_array
             }
+            #diatoms_data_array.append(diatom_data)
         
         # Package the diatoms data
-        paper_diatoms_data = diatom_data if 'diatom_data' in locals() else {}
+        paper_diatoms_data = diatom_data if diatom_data else {}
 
+        
         if not paper_diatoms_data:
             logger.warning("No diatoms data was generated")
             
         return paper_info, paper_diatoms_data, paper_image_urls
 
+
+    # Storage Methods
     def get_storage_client(self):
         """
         Get authenticated Google Cloud Storage client.
@@ -163,31 +177,30 @@ class ClaudeAI:
             logger.error(f"Error retrieving public URLs: {e}")
             return []
 
-
     def load_paper_json_files(self, papers_json_public_url: str) -> List[Dict[str, Any]]:
-            """
-            Load existing paper JSON files from GCS.
+        """
+        Load existing paper JSON files from GCS.
 
-            Args:
-                papers_json_public_url (str): Public URL of the JSON files
+        Args:
+            papers_json_public_url (str): Public URL of the JSON files
 
-            Returns:
-                list: List of paper JSON objects
-            """
-            try:
-                storage_client = self.get_storage_client()
-                bucket_name = papers_json_public_url.split('/')[3]
-                blob_path = '/'.join(papers_json_public_url.split('/')[4:])
+        Returns:
+            list: List of paper JSON objects
+        """
+        try:
+            storage_client = self.get_storage_client()
+            bucket_name = papers_json_public_url.split('/')[3]
+            blob_path = '/'.join(papers_json_public_url.split('/')[4:])
 
-                bucket = storage_client.bucket(bucket_name)
-                blob = bucket.blob(blob_path)
+            bucket = storage_client.bucket(bucket_name)
+            blob = bucket.blob(blob_path)
 
-                if blob.exists():
-                    content = blob.download_as_string()
-                    return json.loads(content)
-            except Exception as e:
-                logger.error(f"Error loading paper JSON files: {str(e)}")
-            return []
+            if blob.exists():
+                content = blob.download_as_string()
+                return json.loads(content)
+        except Exception as e:
+            logger.error(f"Error loading paper JSON files: {str(e)}")
+        return []
 
     def save_paper_json_files(self, papers_json_public_url: str, 
                             paper_json_files: List[Dict[str, Any]]) -> str:
@@ -210,7 +223,7 @@ class ClaudeAI:
             blob = bucket.blob(blob_path)
 
             blob.upload_from_string(
-                json.dumps(paper_json_files, indent=2),
+                json.dumps(paper_json_files),
                 content_type='application/json'
             )
             return papers_json_public_url
@@ -218,6 +231,7 @@ class ClaudeAI:
             logger.error(f"Error saving paper JSON files: {str(e)}")
             return ""
 
+    # Prompt Generation Methods
     @staticmethod
     def part0_get_citation_info_for_paper() -> str:
         """
@@ -315,7 +329,6 @@ class ClaudeAI:
         Review the text multiple times to ensure no species are missed. Parse the provided text and return only the JSON object without any additional text or explanation.
         """
 
-
     @staticmethod
     def part1_create_messages_for_paper_info_json(pdf_text_content: str, 
                                                 prompt: str) -> List[Dict[str, Any]]:
@@ -343,7 +356,7 @@ class ClaudeAI:
                     }
                 ]
             }
-        ]   
+        ]
 
     @staticmethod
     def part2_create_diatoms_data_object_for_paper() -> str:
@@ -533,50 +546,47 @@ class ClaudeAI:
             logger.error(f"Unexpected error: {str(e)}")
         
         return []
-
+    
     @staticmethod
     def update_and_save_papers(json_url: str, paper_json_files: List[Dict[str, Any]], 
                              diatoms_data: List[Dict[str, Any]]) -> bool:
         """
         Update papers JSON with modified diatoms_data and save back to GCS.
-        
+
         Args:
-            json_url (str): URL where JSON should be saved
+            json_url (str): URL where the JSON should be saved
             paper_json_files (list): List of paper JSON objects
             diatoms_data (list): List of diatoms data objects
-            
+
         Returns:
             bool: True if successful, False otherwise
         """
         try:
-            # Create mapping of image URLs to diatoms data
-            diatoms_data_map = {data.get('image_url', ''): data for data in diatoms_data if data.get('image_url')}
+            diatoms_data_map = {data['image_url']: data for data in diatoms_data}
             
-            # Update paper_json_files with new diatoms data
             for paper in paper_json_files:
-                if isinstance(paper.get('diatoms_data'), str):
-                    paper['diatoms_data'] = json.loads(paper['diatoms_data'])
-                    
-                current_data = paper.get('diatoms_data', {})
-                image_url = current_data.get('image_url', '')
+                paper_image_urls = paper.get("result", {}).get("paper_image_urls", [])
                 
-                if image_url in diatoms_data_map:
-                    paper['diatoms_data'] = diatoms_data_map[image_url]
+                for image_url in paper_image_urls:
+                    if image_url in diatoms_data_map:
+                        paper["diatoms_data"] = diatoms_data_map[image_url]
+                        break
             
-            # Save updated data to GCS
-            storage_client = storage.Client.from_service_account_info(
-                json.loads(os.getenv('GOOGLE_SECRET_JSON'))
-            )
-            
+            # Create new ClaudeAI instance to access storage client
+            claude = ClaudeAI()
+            storage_client = claude.get_storage_client()
             bucket_name = json_url.split('/')[3]
             blob_path = '/'.join(json_url.split('/')[4:])
             
             bucket = storage_client.bucket(bucket_name)
             blob = bucket.blob(blob_path)
             
-            # Save with proper formatting
             json_content = json.dumps(paper_json_files, indent=2)
-            blob.upload_from_string(json_content, content_type='application/json')
+            
+            blob.upload_from_string(
+                json_content,
+                content_type='application/json'
+            )
             
             logger.info(f"Successfully updated and saved papers JSON to: {json_url}")
             return True
@@ -584,3 +594,6 @@ class ClaudeAI:
         except Exception as e:
             logger.error(f"Error updating and saving papers: {str(e)}")
             return False
+        
+        # Example usage:
+        # updated_public_url = ClaudeAI.update_and_save_papers(json_url, PAPER_JSON_FILES, DIATOMS_DATA)
