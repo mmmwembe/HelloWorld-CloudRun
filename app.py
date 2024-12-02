@@ -595,24 +595,22 @@ def get_segmentation():
         if not url:
             raise ValueError("No URL provided")
             
-        # Extract filename from URL
-        filename = url.split('/')[-1]
+        logger.info(f"Attempting to load segmentation data from: {url}")
         
-        # Use GCP ops to get the file content
-        content = gcp_ops.get_segmentation_data(
-            filename=filename,
-            bucket_name=BUCKET_SEGMENTATION_LABELS
-        )
+        # Use the existing load_segmentation_data method
+        content = gcp_ops.load_segmentation_data(url)
         
         if content is None:
-            raise ValueError("No segmentation data found")
+            logger.error(f"No segmentation data found at {url}")
+            return jsonify({'error': 'Segmentation file not found'}), 404
             
+        logger.info(f"Successfully loaded segmentation data: {len(content)} characters")
         return content, 200, {'Content-Type': 'text/plain'}
         
     except Exception as e:
-        logger.error("Error fetching segmentation data: {}".format(str(e)))
+        logger.error(f"Error in get_segmentation: {str(e)}")
         return jsonify({
-            'error': str(e)
+            'error': f"Failed to fetch segmentation data: {str(e)}"
         }), 500
         
 # @app.route('/api/save_segmentation', methods=['POST'])
