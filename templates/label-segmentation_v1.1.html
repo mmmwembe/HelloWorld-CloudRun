@@ -13,7 +13,6 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        // DiatomeSelector Component
         function DiatomeSelector({ selected, setSelected }) {
             const options = [
                 { label: 'Diatom', value: 0 },
@@ -34,7 +33,7 @@
                                     name="diatom-type"
                                     value={option.value}
                                     checked={selected === option.value}
-                                    onChange={(e) => setSelected(Number(e.target.value))}
+                                    onChange={(e) => setSelected(parseInt(e.target.value, 10))}
                                     className="w-4 h-4 text-blue-600 cursor-pointer"
                                 />
                                 <span className="text-sm font-medium text-gray-700">
@@ -47,36 +46,6 @@
             );
         }
 
-        // SegmentationList Component
-        function SegmentationList({ polygons, selectedIndex, onSelectSegment, getDiatomLabel }) {
-            return (
-                <div className="mt-4 space-y-2 px-4">
-                    {polygons.map((polygon, index) => (
-                        <div
-                            key={index}
-                            onClick={() => onSelectSegment(index)}
-                            className={`p-3 rounded-lg cursor-pointer transition-all duration-200 ${
-                                selectedIndex === index 
-                                    ? 'bg-blue-600 text-white shadow-lg transform scale-105' 
-                                    : 'bg-gray-700 text-gray-200 hover:bg-gray-600'
-                            }`}
-                        >
-                            <div className="flex items-center justify-between">
-                                <span className="font-medium">
-                                    {index + 1}. {getDiatomLabel(polygon.label)}
-                                </span>
-                                <div 
-                                    className="w-4 h-4 rounded-full" 
-                                    style={{ backgroundColor: polygon.color }}
-                                />
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            );
-        }
-
-        // CircularProgress Component
         function CircularProgress({ progress }) {
             const radius = 20;
             const circumference = 2 * Math.PI * radius;
@@ -109,7 +78,6 @@
             );
         }
 
-        // Toast Component
         function Toast({ message, onClose }) {
             React.useEffect(() => {
                 const timer = setTimeout(() => {
@@ -128,9 +96,7 @@
             );
         }
 
-// Main DiatomSegmenter Component
-function DiatomSegmenter() {
-            // State declarations
+        function DiatomSegmenter() {
             const [imageIndex, setImageIndex] = React.useState(0);
             const [totalImages, setTotalImages] = React.useState(0);
             const [polygons, setPolygons] = React.useState([]);
@@ -143,36 +109,25 @@ function DiatomSegmenter() {
             const [selectedType, setSelectedType] = React.useState(2);
             const [imageData, setImageData] = React.useState(null);
             const [pendingSegmentationData, setPendingSegmentationData] = React.useState(null);
-            const [selectedSegmentIndex, setSelectedSegmentIndex] = React.useState(null);
-            
-            // Refs
+            const [selectedSegmentationIndex, setSelectedSegmentationIndex] = React.useState(null);
+            const [segmentationInfo, setSegmentationInfo] = React.useState([]);
+
             const canvasRef = React.useRef(null);
             const imageRef = React.useRef(null);
             const containerRef = React.useRef(null);
 
-            // Utility functions
             const getRandomColor = () => {
                 const colors = ['#2ecc71', '#e74c3c', '#3498db', '#f1c40f', '#9b59b6', '#1abc9c'];
                 return colors[Math.floor(Math.random() * colors.length)];
             };
 
-            const getDiatomLabel = (value) => {
-                const labels = {
-                    0: 'Diatom',
-                    1: 'Incomplete Diatom',
-                    2: 'Complete Diatom',
-                    3: 'Fragment Diatom',
-                    4: 'Blurred Diatom',
-                    5: 'Diatom SideView'
-                };
-                return labels[value] || 'Unknown';
-            };
-
             const parseSegmentationFile = (content, imageWidth, imageHeight) => {
                 if (!content.trim()) return [];
                 
+                console.log('Parsing segmentation file with dimensions:', imageWidth, imageHeight);
+                
                 const lines = content.trim().split('\n');
-                return lines.map(line => {
+                return lines.map((line, index) => {
                     const [label, ...coords] = line.split(' ');
                     const points = [];
                     for (let i = 0; i < coords.length; i += 2) {
@@ -186,30 +141,12 @@ function DiatomSegmenter() {
                         }
                     }
                     return {
-                        label: parseInt(label),
+                        segmentationIndex: index,
+                        label: parseInt(label, 10),
                         points,
                         color: getRandomColor()
                     };
                 }).filter(polygon => polygon.points.length >= 3);
-            };
-
-            const generateSegmentationText = () => {
-                const image = imageRef.current;
-                if (!image) return '';
-                
-                const imageWidth = image.naturalWidth;
-                const imageHeight = image.naturalHeight;
-                
-                return polygons.map(polygon => {
-                    if (polygon.points.length < 3) return '';
-                    
-                    const normalizedPoints = polygon.points.map(point => {
-                        const normalizedX = point.x / imageWidth;
-                        const normalizedY = point.y / imageHeight;
-                        return `${normalizedX.toFixed(6)} ${normalizedY.toFixed(6)}`;
-                    }).join(' ');
-                    return `${polygon.label} ${normalizedPoints}`;
-                }).filter(Boolean).join('\n');
             };
 
             const loadImageData = async (index) => {
@@ -224,7 +161,6 @@ function DiatomSegmenter() {
                     setImageData(data.data);
                     setTotalImages(data.total_images);
                     setImageIndex(data.current_index);
-                    setSelectedSegmentIndex(null);
                     
                     if (data.data.segmentation_url) {
                         try {
@@ -247,7 +183,6 @@ function DiatomSegmenter() {
                     console.error('Error loading image data:', error);
                 }
             };
-
             const handleImageLoad = () => {
                 const canvas = canvasRef.current;
                 const container = containerRef.current;
@@ -271,77 +206,23 @@ function DiatomSegmenter() {
                 }
             };
 
-            const drawPolygons = () => {
-                const canvas = canvasRef.current;
-                if (!canvas) return;
-
-                const ctx = canvas.getContext('2d');
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-                // Draw completed polygons
-                polygons.forEach((polygon, index) => {
-                    if (polygon.points.length < 3) return;
-
-                    ctx.beginPath();
-                    ctx.moveTo(polygon.points[0].x, polygon.points[0].y);
-                    for (let i = 1; i < polygon.points.length; i++) {
-                        ctx.lineTo(polygon.points[i].x, polygon.points[i].y);
-                    }
-                    ctx.closePath();
+            const generateSegmentationText = () => {
+                const image = imageRef.current;
+                if (!image) return '';
+                
+                const imageWidth = image.naturalWidth;
+                const imageHeight = image.naturalHeight;
+                
+                return polygons.map(polygon => {
+                    if (polygon.points.length < 3) return ''; 
                     
-                    const isSelected = index === selectedSegmentIndex;
-                    
-                    if (isSelected) {
-                        ctx.strokeStyle = '#ffffff';
-                        ctx.lineWidth = 4;
-                        ctx.stroke();
-                        
-                        ctx.strokeStyle = polygon.color;
-                        ctx.lineWidth = 2;
-                        ctx.stroke();
-                        
-                        ctx.fillStyle = `${polygon.color}80`;
-                    } else {
-                        ctx.strokeStyle = polygon.color;
-                        ctx.lineWidth = 2;
-                        ctx.stroke();
-                        
-                        ctx.fillStyle = `${polygon.color}40`;
-                    }
-                    ctx.fill();
-                    
-                    if (isSelected) {
-                        const centerX = polygon.points.reduce((sum, p) => sum + p.x, 0) / polygon.points.length;
-                        const centerY = polygon.points.reduce((sum, p) => sum + p.y, 0) / polygon.points.length;
-                        
-                        ctx.font = '14px Arial';
-                        ctx.textAlign = 'center';
-                        ctx.textBaseline = 'middle';
-                        ctx.fillStyle = '#ffffff';
-                        ctx.strokeStyle = '#000000';
-                        ctx.lineWidth = 3;
-                        
-                        const text = `${index + 1}. ${getDiatomLabel(polygon.label)}`;
-                        ctx.strokeText(text, centerX, centerY);
-                        ctx.fillText(text, centerX, centerY);
-                    }
-                });
-
-                // Draw current polygon being created
-                if (currentPolygon.length > 0) {
-                    ctx.beginPath();
-                    ctx.moveTo(currentPolygon[0].x, currentPolygon[0].y);
-                    for (let i = 1; i < currentPolygon.length; i++) {
-                        ctx.lineTo(currentPolygon[i].x, currentPolygon[i].y);
-                    }
-                    if (isDrawing) {
-                        ctx.lineTo(currentPolygon[currentPolygon.length - 1].x, currentPolygon[currentPolygon.length - 1].y);
-                    }
-                    
-                    ctx.strokeStyle = '#2ecc71';
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
-                }
+                    const normalizedPoints = polygon.points.map(point => {
+                        const normalizedX = point.x / imageWidth;
+                        const normalizedY = point.y / imageHeight;
+                        return `${normalizedX.toFixed(6)} ${normalizedY.toFixed(6)}`;
+                    }).join(' ');
+                    return `${polygon.label} ${normalizedPoints}`;
+                }).filter(Boolean).join('\n');
             };
 
             const handleSave = async () => {
@@ -354,6 +235,7 @@ function DiatomSegmenter() {
 
                 try {
                     const segmentationText = generateSegmentationText();
+                    
                     const imageFileName = imageUrl.split('/').pop().replace(/\.[^/.]+$/, '');
                     
                     const response = await fetch('/api/save_segmentation', {
@@ -369,7 +251,6 @@ function DiatomSegmenter() {
                     });
                     
                     const data = await response.json();
-                    console.log('Save response:', data);
                     
                     clearInterval(progressInterval);
                     setSaveProgress(100);
@@ -402,6 +283,110 @@ function DiatomSegmenter() {
                 setImageIndex(prev => Math.min(totalImages - 1, prev + 1));
             };
 
+            const getLabelText = (labelValue) => {
+                const options = [
+                    'Diatom',
+                    'Incomplete Diatom',
+                    'Complete Diatom',
+                    'Fragment Diatom',
+                    'Blurred Diatom',
+                    'Diatom SideView'
+                ];
+                return options[labelValue] || 'Unknown';
+            };
+
+
+            const drawPolygons = () => {
+                const canvas = canvasRef.current;
+                if (!canvas) return;
+
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                // Draw completed polygons
+                polygons.forEach((polygon) => {
+                    if (polygon.points.length < 3) return;
+
+                    ctx.beginPath();
+                    ctx.moveTo(polygon.points[0].x, polygon.points[0].y);
+                    for (let i = 1; i < polygon.points.length; i++) {
+                        ctx.lineTo(polygon.points[i].x, polygon.points[i].y);
+                    }
+                    ctx.closePath();
+
+                    const isSelected = selectedSegmentationIndex === polygon.segmentationIndex;
+
+                    ctx.strokeStyle = isSelected ? '#ffffff' : polygon.color;
+                    ctx.lineWidth = isSelected ? 3 : 2;
+                    ctx.stroke();
+
+                    // Semi-transparent fill with more opacity for selected
+                    ctx.fillStyle = `${polygon.color}${isSelected ? '80' : '40'}`;
+                    ctx.fill();
+                });
+
+                // Draw current polygon being created
+                if (currentPolygon.length > 0) {
+                    ctx.beginPath();
+                    ctx.moveTo(currentPolygon[0].x, currentPolygon[0].y);
+                    for (let i = 1; i < currentPolygon.length; i++) {
+                        ctx.lineTo(currentPolygon[i].x, currentPolygon[i].y);
+                    }
+                    ctx.strokeStyle = '#000';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                }
+            };
+
+
+
+            // const drawPolygons = () => {
+            //     const canvas = canvasRef.current;
+            //     if (!canvas) return;
+
+            //     const ctx = canvas.getContext('2d');
+            //     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            //     polygons.forEach(polygon => {
+            //         if (polygon.points.length < 3) return;
+
+            //         ctx.beginPath();
+            //         ctx.moveTo(polygon.points[0].x, polygon.points[0].y);
+            //         for (let i = 1; i < polygon.points.length; i++) {
+            //             ctx.lineTo(polygon.points[i].x, polygon.points[i].y);
+            //         }
+            //         ctx.closePath();
+                    
+            //         const isSelected = selectedSegmentationIndex === polygon.segmentationIndex;
+                    
+            //         ctx.strokeStyle = isSelected ? '#ffffff' : polygon.color;
+            //         ctx.lineWidth = isSelected ? 3 : 2;
+            //         ctx.stroke();
+                    
+            //         ctx.fillStyle = `${polygon.color}${isSelected ? '80' : '40'}`;
+            //         ctx.fill();
+            //     });
+
+            //     if (currentPolygon.length > 0) {
+            //         ctx.beginPath();
+            //         ctx.moveTo(currentPolygon[0].x, currentPolygon[0].y);
+            //         for (let i = 1; i < currentPolygon.length; i++) {
+            //             ctx.lineTo(currentPolygon[i].x, currentPolygon[i].y);
+            //         }
+            //         if (isDrawing) {
+            //             ctx.lineTo(currentPolygon[currentPolygon.length - 1].x, currentPolygon[currentPolygon.length - 1].y);
+            //         }
+                    
+            //         ctx.strokeStyle = '#2ecc71';
+            //         ctx.lineWidth = 2;
+            //         ctx.stroke();
+            //     }
+            // };
+
+
+
+
+
             const handleCanvasClick = (e) => {
                 const rect = canvasRef.current.getBoundingClientRect();
                 const x = e.clientX - rect.left;
@@ -417,11 +402,13 @@ function DiatomSegmenter() {
                     );
 
                     if (distance < 20 && currentPolygon.length > 2) {
-                        setPolygons([...polygons, {
+                        const newPolygon = {
                             label: selectedType,
                             points: currentPolygon,
-                            color: getRandomColor()
-                        }]);
+                            color: getRandomColor(),
+                            segmentationIndex: polygons.length
+                        };
+                        setPolygons([...polygons, newPolygon]);
                         setCurrentPolygon([]);
                         setIsDrawing(false);
                     } else {
@@ -429,7 +416,6 @@ function DiatomSegmenter() {
                     }
                 }
             };
-
             const handleMouseMove = (e) => {
                 if (!isDrawing) return;
                 drawPolygons();
@@ -441,10 +427,6 @@ function DiatomSegmenter() {
                     setIsDrawing(false);
                     drawPolygons();
                 }
-            };
-
-            const handleSelectSegment = (index) => {
-                setSelectedSegmentIndex(index === selectedSegmentIndex ? null : index);
             };
 
             React.useEffect(() => {
@@ -466,7 +448,11 @@ function DiatomSegmenter() {
 
             React.useEffect(() => {
                 drawPolygons();
-            }, [polygons, currentPolygon, selectedSegmentIndex]);
+            }, [polygons, currentPolygon, selectedType, selectedSegmentationIndex]);
+
+            const handleSegmentationClick = (index) => {
+                setSelectedSegmentationIndex(index);
+            };
 
             return (
                 <div className="flex h-screen bg-gray-200">
@@ -542,6 +528,7 @@ function DiatomSegmenter() {
                                 </button>
                             </div>
 
+
                             {imageData?.segmentation_url && (
                                 <div className="mt-4 max-w-4xl w-full">
                                     <div className="bg-gray-100 p-4 rounded-lg">
@@ -565,22 +552,42 @@ function DiatomSegmenter() {
                             Polygons ({polygons.length})
                         </div>
                         <div className="p-4 text-white">
-                            <p>Instructions:</p>
-                            <ul className="list-disc pl-5 space-y-2 mt-2">
+                            <p className="font-semibold mb-2">Instructions:</p>
+                            <ul className="list-disc pl-5 space-y-2 mb-6">
                                 <li>Click to start drawing a polygon</li>
                                 <li>Click to add points to the polygon</li>
                                 <li>Click near the start point to close the polygon</li>
                                 <li>Press ESC to cancel current polygon</li>
-                                <li>Click on a segmentation in the list to highlight it</li>
                             </ul>
+
+                            <div className="border-t border-gray-700 pt-4">
+                                <p className="font-semibold mb-3">Segmentations:</p>
+                                <div className="space-y-2">
+                                    {polygons.map((polygon) => (
+                                        <div
+                                            key={polygon.segmentationIndex}
+                                            onClick={() => handleSegmentationClick(polygon.segmentationIndex)}
+                                            className={`p-3 rounded cursor-pointer transition-colors ${selectedSegmentationIndex === polygon.segmentationIndex ? 'bg-blue-600' : 'hover:bg-gray-700'}`}
+                                            style={{ borderLeft: `4px solid ${polygon.color}` }}
+                                        >
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-sm">
+                                                    #{polygon.segmentationIndex + 1} - {getLabelText(polygon.label)}
+                                                </span>
+                                                <span className="text-xs text-gray-400">
+                                                    {polygon.points.length} points
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            {polygons.length === 0 && (
+                                <p className="text-gray-400 text-center mt-4">
+                                    No segmentations yet. Start drawing to add some!
+                                </p>
+                            )}
                         </div>
-                        
-                        <SegmentationList 
-                            polygons={polygons}
-                            selectedIndex={selectedSegmentIndex}
-                            onSelectSegment={handleSelectSegment}
-                            getDiatomLabel={getDiatomLabel}
-                        />
                     </div>
 
                     {showToast && (
@@ -593,7 +600,6 @@ function DiatomSegmenter() {
             );
         }
 
-        // Add styles
         const style = document.createElement('style');
         style.textContent = `
             @keyframes slide-up {
@@ -615,9 +621,9 @@ function DiatomSegmenter() {
         `;
         document.head.appendChild(style);
 
-        // Render the application
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<DiatomSegmenter />);
     </script>
 </body>
-</html>         
+</html>
+
