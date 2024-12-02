@@ -480,3 +480,18 @@ class GCPOps:
         except Exception as e:
             logger.error(f"Error loading segmentation data: {str(e)}")
             return None
+        
+    def get_segmentation_data(self, filename, bucket_name):
+        """Get segmentation data from GCS bucket"""
+        try:
+            bucket = self.storage_client.get_bucket(bucket_name)
+            blob = bucket.blob(filename)
+            
+            if not blob.exists():
+                return None
+                
+            return blob.download_as_string().decode('utf-8')
+            
+        except Exception as e:
+            logger.error(f"Error getting segmentation data: {str(e)}")
+            return None

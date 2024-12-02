@@ -587,6 +587,34 @@ def save_segmentation():
             'error': str(e)
         }), 500
 
+@app.route('/api/get_segmentation')
+def get_segmentation():
+    """Proxy route to fetch segmentation data from GCS"""
+    try:
+        url = request.args.get('url')
+        if not url:
+            raise ValueError("No URL provided")
+            
+        # Extract filename from URL
+        filename = url.split('/')[-1]
+        
+        # Use GCP ops to get the file content
+        content = gcp_ops.get_segmentation_data(
+            filename=filename,
+            bucket_name=BUCKET_SEGMENTATION_LABELS
+        )
+        
+        if content is None:
+            raise ValueError("No segmentation data found")
+            
+        return content, 200, {'Content-Type': 'text/plain'}
+        
+    except Exception as e:
+        logger.error("Error fetching segmentation data: {}".format(str(e)))
+        return jsonify({
+            'error': str(e)
+        }), 500
+        
 # @app.route('/api/save_segmentation', methods=['POST'])
 # def save_segmentation():
 #     """Save segmentation data to GCS bucket and update DIATOMS_DATA"""
