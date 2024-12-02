@@ -494,6 +494,8 @@ def segmentation():
         app.logger.error(f"Error in segmentation route: {str(e)}")
         return render_template('error.html', error=str(e)), 500
 
+# Update these routes in app.py
+
 @app.route('/api/save_segmentation', methods=['POST'])
 def save_segmentation():
     """Save segmentation data to GCS bucket and update DIATOMS_DATA"""
@@ -502,6 +504,9 @@ def save_segmentation():
         image_index = data.get('image_index', 0)
         segmentation_data = data.get('segmentation_data', '')
         image_filename = data.get('image_filename', '')
+        
+        logger.info(f"Saving segmentation for image {image_filename}")
+        logger.debug(f"Segmentation data: {segmentation_data}")
         
         if not segmentation_data or not image_filename:
             raise ValueError("Missing required data")
@@ -516,6 +521,8 @@ def save_segmentation():
         
         if not segmentation_url:
             raise Exception("Failed to save segmentation data to GCS")
+        
+        logger.info(f"Saved segmentation to URL: {segmentation_url}")
             
         # Update DIATOMS_DATA with the segmentation URL
         if 0 <= image_index < len(DIATOMS_DATA):
@@ -546,9 +553,11 @@ def save_segmentation():
                 'message': 'Segmentation saved successfully',
                 'segmentation_url': segmentation_url
             })
+        else:
+            raise ValueError(f"Invalid image index: {image_index}")
             
     except Exception as e:
-        app.logger.error(f"Error saving segmentation: {str(e)}")
+        logger.error(f"Error saving segmentation: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)
