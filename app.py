@@ -34,8 +34,22 @@ def initialize_data():
     PAPERS_JSON_PUBLIC_URL = f"https://storage.googleapis.com/{PAPERS_BUCKET_JSON_FILES}/jsons_from_pdfs/{SESSION_ID}/{SESSION_ID}.json"
     
     try:
+        # Check if the URL exists first
+        if not gcp_ops.check_gcs_file_exists(PAPERS_JSON_PUBLIC_URL):
+            app.logger.warning(f"No data file found at {PAPERS_JSON_PUBLIC_URL}, initializing empty data structures")
+            PAPER_JSON_FILES = []
+            DIATOMS_DATA = []
+            return
+
+        # Load data if file exists
         PAPER_JSON_FILES = gcp_ops.load_paper_json_files(PAPERS_JSON_PUBLIC_URL)
-        DIATOMS_DATA = ClaudeAI.get_DIATOMS_DATA(PAPERS_JSON_PUBLIC_URL)
+        if PAPER_JSON_FILES:
+            DIATOMS_DATA = ClaudeAI.get_DIATOMS_DATA(PAPERS_JSON_PUBLIC_URL)
+            app.logger.info(f"Successfully loaded {len(DIATOMS_DATA)} diatom entries")
+        else:
+            DIATOMS_DATA = []
+            app.logger.warning("No paper JSON files found, initializing empty data structures")
+            
     except Exception as e:
         app.logger.error(f"Error initializing data: {str(e)}")
         PAPER_JSON_FILES = []
@@ -44,6 +58,23 @@ def initialize_data():
 def safe_value(value):
     """Safely handle potentially None values"""
     return value if value else ""
+
+# Add middleware here, before routes
+@app.before_request
+def ensure_data_initialized():
+    """Ensure data is initialized before handling requests"""
+    global DIATOMS_DATA, PAPER_JSON_FILES
+    
+    # Skip for static files and certain routes
+    if request.path.startswith('/static/') or request.path in ['/', '/modules']:
+        return
+        
+    # Check if data structures are empty
+    if not DIATOMS_DATA and not PAPER_JSON_FILES:
+        app.logger.warning("Data structures not initialized, reinitializing...")
+        initialize_data()
+
+
 
 # Create an instance of GCPOps
 gcp_ops = GCPOps()
@@ -324,15 +355,49 @@ def label():
 
 @app.route('/api/diatoms', methods=['GET'])
 def get_diatoms():
-    image_index = request.args.get('index', 0, type=int)
-    current_data = DIATOMS_DATA
-    image_index = min(max(0, image_index), len(current_data) - 1)
-    
-    return jsonify({
-        'current_index': image_index,
-        'total_images': len(current_data),
-        'data': current_data[image_index]
-    })
+    try:
+        image_index = request.args.get('index', 0, type=int)
+        current_data = DIATOMS_DATA
+        
+        # Check if we have any data
+        if not current_data:
+            return jsonify({
+                'current_index': 0,
+                'total_images': 0,
+                'data': {},
+                'error': 'No diatoms data available'
+            })
+        
+        # Ensure index is within bounds
+        total_images = len(current_data)
+        image_index = min(max(0, image_index), total_images - 1)
+        
+        # Get the data for the current index
+        try:
+            current_image_data = current_data[image_index]
+        except IndexError:
+            app.logger.error(f"Failed to get data for index {image_index} from list of length {total_images}")
+            return jsonify({
+                'current_index': 0,
+                'total_images': total_images,
+                'data': {},
+                'error': 'Invalid image index'
+            })
+        
+        return jsonify({
+            'current_index': image_index,
+            'total_images': total_images,
+            'data': current_image_data
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error in get_diatoms: {str(e)}")
+        return jsonify({
+            'current_index': 0,
+            'total_images': 0,
+            'data': {},
+            'error': f'Error retrieving diatoms data: {str(e)}'
+        }), 500
 
 @app.route('/api/save', methods=['POST'])
 def save():
