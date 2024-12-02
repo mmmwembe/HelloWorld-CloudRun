@@ -475,6 +475,26 @@ def download_labels():
 
 # Add these routes to app.py
 
+# @app.route('/segmentation')
+# def segmentation():
+#     """Route for the segmentation labeling interface"""
+#     global DIATOMS_DATA
+    
+#     try:
+#         if not DIATOMS_DATA:
+#             try:
+#                 DIATOMS_DATA = ClaudeAI.get_DIATOMS_DATA(PAPERS_JSON_PUBLIC_URL)
+#             except Exception as e:
+#                 app.logger.error(f"Error loading diatoms data: {str(e)}")
+#                 return render_template('error.html', error="No diatom data available"), 404
+        
+#         app.logger.info(f"Segmentation route: Found {len(DIATOMS_DATA)} diatom entries")
+#         return render_template('label-segmentation.html')
+        
+#     except Exception as e:
+#         app.logger.error(f"Error in segmentation route: {str(e)}")
+#         return render_template('error.html', error=str(e)), 500
+    
 @app.route('/segmentation')
 def segmentation():
     """Route for the segmentation labeling interface"""
@@ -485,15 +505,16 @@ def segmentation():
             try:
                 DIATOMS_DATA = ClaudeAI.get_DIATOMS_DATA(PAPERS_JSON_PUBLIC_URL)
             except Exception as e:
-                app.logger.error(f"Error loading diatoms data: {str(e)}")
+                app.logger.error("Error loading diatoms data: {}".format(str(e)))
                 return render_template('error.html', error="No diatom data available"), 404
         
-        app.logger.info(f"Segmentation route: Found {len(DIATOMS_DATA)} diatom entries")
-        return render_template('label-segmentation.html')
+        # Change this line to send_file instead of render_template
+        return send_file('templates/label-segmentation.html', mimetype='text/html')
         
     except Exception as e:
-        app.logger.error(f"Error in segmentation route: {str(e)}")
+        app.logger.error("Error in segmentation route: {}".format(str(e)))
         return render_template('error.html', error=str(e)), 500
+
 
 @app.route('/api/save_segmentation', methods=['POST'])
 def save_segmentation():
