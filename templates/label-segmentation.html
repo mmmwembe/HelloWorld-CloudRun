@@ -220,6 +220,8 @@ function DiatomSegmenter() {
                         console.error('API Error:', data.error);
                         return;
                     }
+                    console.log('Loaded image data:', data.data);
+                    
                     setImageUrl(data.data.image_url);
                     setImageData(data.data);
                     setTotalImages(data.total_images);
@@ -227,19 +229,27 @@ function DiatomSegmenter() {
                     setSelectedSegmentIndex(null);
                     
                     if (data.data.segmentation_url) {
+                        console.log('Found segmentation URL:', data.data.segmentation_url);
                         try {
                             const segResponse = await fetch(data.data.segmentation_url);
                             if (!segResponse.ok) {
                                 throw new Error('Failed to fetch segmentation data');
                             }
                             const segText = await segResponse.text();
+                            console.log('Loaded segmentation text:', segText);
                             setPendingSegmentationData(segText);
+                            
+                            // Also check if we have existing segmentation indices
+                            if (data.data.segmentation_indices_array) {
+                                console.log('Found segmentation indices:', data.data.segmentation_indices_array);
+                            }
                         } catch (error) {
                             console.error('Error loading segmentation data:', error);
                             setPendingSegmentationData(null);
                             setPolygons([]);
                         }
                     } else {
+                        console.log('No segmentation URL found');
                         setPendingSegmentationData(null);
                         setPolygons([]);
                     }
@@ -248,28 +258,97 @@ function DiatomSegmenter() {
                 }
             };
 
+            
+            // const loadImageData = async (index) => {
+            //     try {
+            //         const response = await fetch(`/api/diatoms?index=${index}`);
+            //         const data = await response.json();
+            //         if (data.error) {
+            //             console.error('API Error:', data.error);
+            //             return;
+            //         }
+            //         setImageUrl(data.data.image_url);
+            //         setImageData(data.data);
+            //         setTotalImages(data.total_images);
+            //         setImageIndex(data.current_index);
+            //         setSelectedSegmentIndex(null);
+                    
+            //         if (data.data.segmentation_url) {
+            //             try {
+            //                 const segResponse = await fetch(data.data.segmentation_url);
+            //                 if (!segResponse.ok) {
+            //                     throw new Error('Failed to fetch segmentation data');
+            //                 }
+            //                 const segText = await segResponse.text();
+            //                 setPendingSegmentationData(segText);
+            //             } catch (error) {
+            //                 console.error('Error loading segmentation data:', error);
+            //                 setPendingSegmentationData(null);
+            //                 setPolygons([]);
+            //             }
+            //         } else {
+            //             setPendingSegmentationData(null);
+            //             setPolygons([]);
+            //         }
+            //     } catch (error) {
+            //         console.error('Error loading image data:', error);
+            //     }
+            // };
+
             const handleImageLoad = () => {
                 const canvas = canvasRef.current;
                 const container = containerRef.current;
                 const image = imageRef.current;
                 
+                console.log('Image loaded, handling load event');
+                
                 if (canvas && container && image) {
+                    console.log('Canvas dimensions:', container.offsetWidth, container.offsetHeight);
                     canvas.width = container.offsetWidth;
                     canvas.height = container.offsetHeight;
                     
                     if (pendingSegmentationData) {
+                        console.log('Processing pending segmentation data');
                         const loadedPolygons = parseSegmentationFile(
                             pendingSegmentationData,
                             image.naturalWidth,
                             image.naturalHeight
                         );
+                        console.log('Created polygons from segmentation data:', loadedPolygons);
                         setPolygons(loadedPolygons);
                         setPendingSegmentationData(null);
+                    } else {
+                        console.log('No pending segmentation data to process');
                     }
                     
                     drawPolygons();
                 }
-            };
+            };            
+
+            // const handleImageLoad = () => {
+            //     const canvas = canvasRef.current;
+            //     const container = containerRef.current;
+            //     const image = imageRef.current;
+                
+            //     if (canvas && container && image) {
+            //         canvas.width = container.offsetWidth;
+            //         canvas.height = container.offsetHeight;
+                    
+            //         if (pendingSegmentationData) {
+            //             const loadedPolygons = parseSegmentationFile(
+            //                 pendingSegmentationData,
+            //                 image.naturalWidth,
+            //                 image.naturalHeight
+            //             );
+            //             setPolygons(loadedPolygons);
+            //             setPendingSegmentationData(null);
+            //         }
+                    
+            //         drawPolygons();
+            //     }
+            // };
+
+
 
             const drawPolygons = () => {
                 const canvas = canvasRef.current;
@@ -530,6 +609,17 @@ function DiatomSegmenter() {
             React.useEffect(() => {
                 drawPolygons();
             }, [polygons, currentPolygon, selectedSegmentIndex]);
+
+            // Added
+            React.useEffect(() => {
+                const image = imageRef.current;
+                if (image && image.complete && pendingSegmentationData) {
+                    console.log('Image already loaded, processing segmentation data');
+                    handleImageLoad();
+                }
+            }, [imageUrl, pendingSegmentationData]);
+
+
 
             return (
                 <div className="flex h-screen bg-gray-200">
