@@ -9,6 +9,14 @@ from modules.installed_packages import get_installed_packages
 from modules import ClaudeAI
 from modules import GCPOps
 from modules import PDFOps
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -32,69 +40,35 @@ data_lock = Lock()
 gcp_ops = GCPOps()
 
 # Initialize the uploaded PDF files DataFrame
-UPLOADED_PDF_FILES_DF = gcp_ops.initialize_paper_upload_tracker_df_from_gcp(
-    session_id=SESSION_ID,
-    bucket_name=BUCKET_PAPER_TRACKER_CSV
-)
+try:
+    UPLOADED_PDF_FILES_DF = gcp_ops.initialize_paper_upload_tracker_df_from_gcp(
+        session_id=SESSION_ID,
+        bucket_name=BUCKET_PAPER_TRACKER_CSV
+    )
+    logger.info("Successfully initialized PDF files DataFrame")
+except Exception as e:
+    logger.error(f"Error initializing PDF files DataFrame: {str(e)}")
+    UPLOADED_PDF_FILES_DF = pd.DataFrame()
 
-def initialize_data():
-    """Initialize global data structures with thread safety"""
-    global PAPER_JSON_FILES, DIATOMS_DATA
-    
+# Initialize paper data
+try:
     with data_lock:
-        try:
-            # Check if the URL exists first
-            if not gcp_ops.check_gcs_file_exists(PAPERS_JSON_PUBLIC_URL):
-                app.logger.warning(f"No data file found at {PAPERS_JSON_PUBLIC_URL}, initializing empty data structures")
-                PAPER_JSON_FILES = []
-                DIATOMS_DATA = []
-                return
-
-            # Load data if file exists
-            PAPER_JSON_FILES = gcp_ops.load_paper_json_files(PAPERS_JSON_PUBLIC_URL)
-            if PAPER_JSON_FILES:
-                DIATOMS_DATA = ClaudeAI.get_DIATOMS_DATA(PAPERS_JSON_PUBLIC_URL)
-                app.logger.info(f"Successfully loaded {len(DIATOMS_DATA)} diatom entries")
-            else:
-                DIATOMS_DATA = []
-                app.logger.warning("No paper JSON files found, initializing empty data structures")
-                
-        except Exception as e:
-            app.logger.error(f"Error initializing data: {str(e)}")
+        PAPER_JSON_FILES = gcp_ops.load_paper_json_files(PAPERS_JSON_PUBLIC_URL)
+        if PAPER_JSON_FILES:
+            DIATOMS_DATA = ClaudeAI.get_DIATOMS_DATA(PAPERS_JSON_PUBLIC_URL)
+            logger.info(f"Successfully loaded {len(DIATOMS_DATA)} diatom entries")
+        else:
+            logger.warning("No paper JSON files found")
             PAPER_JSON_FILES = []
             DIATOMS_DATA = []
+except Exception as e:
+    logger.error(f"Error loading paper data: {str(e)}")
+    PAPER_JSON_FILES = []
+    DIATOMS_DATA = []
 
 def safe_value(value):
     """Safely handle potentially None values"""
     return value if value else ""
-
-@app.before_request
-def ensure_data_initialized():
-    """Ensure data is initialized before handling requests"""
-    global DIATOMS_DATA, PAPER_JSON_FILES
-    
-    # Skip for static files and certain routes
-    if request.path.startswith('/static/') or request.path in ['/', '/modules']:
-        return
-        
-    # Check if data structures are empty
-    with data_lock:
-        if not DIATOMS_DATA and not PAPER_JSON_FILES:
-            app.logger.warning("Data structures not initialized, reinitializing...")
-            initialize_data()
-
-# Initial data load on module import
-initialize_data()
-
-
-# Create an instance of GCPOps
-gcp_ops = GCPOps()
-
-# Initialize the uploaded PDF files DataFrame
-UPLOADED_PDF_FILES_DF = gcp_ops.initialize_paper_upload_tracker_df_from_gcp(
-    session_id=SESSION_ID,
-    bucket_name=BUCKET_PAPER_TRACKER_CSV
-)
 
 def get_paper_image_urls(metadata):
     """Extract paper image URLs from metadata"""
