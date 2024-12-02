@@ -4,14 +4,14 @@ from datetime import datetime
 import time
 import json
 import tempfile
-from threading import Thread
+from threading import Thread, Lock
 from modules.installed_packages import get_installed_packages
 from modules import ClaudeAI
 from modules import GCPOps
 from modules import PDFOps
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)  # Added for flash messages
+app.secret_key = os.urandom(24)
 
 # Constants
 SESSION_ID = 'eb9db0ca54e94dbc82cffdab497cde13'
@@ -23,43 +23,51 @@ BUCKET_EXTRACTED_IMAGES = 'papers-extracted-images-bucket-mmm'
 BUCKET_PAPER_TRACKER_CSV = 'papers-extracted-pages-csv-bucket-mmm'
 
 # Global variables for data management
-PAPERS_JSON_PUBLIC_URL = None
+PAPERS_JSON_PUBLIC_URL = f"https://storage.googleapis.com/{PAPERS_BUCKET_JSON_FILES}/jsons_from_pdfs/{SESSION_ID}/{SESSION_ID}.json"
 PAPER_JSON_FILES = []
 DIATOMS_DATA = []
+data_lock = Lock()
+
+# Create an instance of GCPOps
+gcp_ops = GCPOps()
+
+# Initialize the uploaded PDF files DataFrame
+UPLOADED_PDF_FILES_DF = gcp_ops.initialize_paper_upload_tracker_df_from_gcp(
+    session_id=SESSION_ID,
+    bucket_name=BUCKET_PAPER_TRACKER_CSV
+)
 
 def initialize_data():
-    """Initialize global data structures"""
-    global PAPERS_JSON_PUBLIC_URL, PAPER_JSON_FILES, DIATOMS_DATA
+    """Initialize global data structures with thread safety"""
+    global PAPER_JSON_FILES, DIATOMS_DATA
     
-    PAPERS_JSON_PUBLIC_URL = f"https://storage.googleapis.com/{PAPERS_BUCKET_JSON_FILES}/jsons_from_pdfs/{SESSION_ID}/{SESSION_ID}.json"
-    
-    try:
-        # Check if the URL exists first
-        if not gcp_ops.check_gcs_file_exists(PAPERS_JSON_PUBLIC_URL):
-            app.logger.warning(f"No data file found at {PAPERS_JSON_PUBLIC_URL}, initializing empty data structures")
+    with data_lock:
+        try:
+            # Check if the URL exists first
+            if not gcp_ops.check_gcs_file_exists(PAPERS_JSON_PUBLIC_URL):
+                app.logger.warning(f"No data file found at {PAPERS_JSON_PUBLIC_URL}, initializing empty data structures")
+                PAPER_JSON_FILES = []
+                DIATOMS_DATA = []
+                return
+
+            # Load data if file exists
+            PAPER_JSON_FILES = gcp_ops.load_paper_json_files(PAPERS_JSON_PUBLIC_URL)
+            if PAPER_JSON_FILES:
+                DIATOMS_DATA = ClaudeAI.get_DIATOMS_DATA(PAPERS_JSON_PUBLIC_URL)
+                app.logger.info(f"Successfully loaded {len(DIATOMS_DATA)} diatom entries")
+            else:
+                DIATOMS_DATA = []
+                app.logger.warning("No paper JSON files found, initializing empty data structures")
+                
+        except Exception as e:
+            app.logger.error(f"Error initializing data: {str(e)}")
             PAPER_JSON_FILES = []
             DIATOMS_DATA = []
-            return
-
-        # Load data if file exists
-        PAPER_JSON_FILES = gcp_ops.load_paper_json_files(PAPERS_JSON_PUBLIC_URL)
-        if PAPER_JSON_FILES:
-            DIATOMS_DATA = ClaudeAI.get_DIATOMS_DATA(PAPERS_JSON_PUBLIC_URL)
-            app.logger.info(f"Successfully loaded {len(DIATOMS_DATA)} diatom entries")
-        else:
-            DIATOMS_DATA = []
-            app.logger.warning("No paper JSON files found, initializing empty data structures")
-            
-    except Exception as e:
-        app.logger.error(f"Error initializing data: {str(e)}")
-        PAPER_JSON_FILES = []
-        DIATOMS_DATA = []
 
 def safe_value(value):
     """Safely handle potentially None values"""
     return value if value else ""
 
-# Add middleware here, before routes
 @app.before_request
 def ensure_data_initialized():
     """Ensure data is initialized before handling requests"""
@@ -70,10 +78,10 @@ def ensure_data_initialized():
         return
         
     # Check if data structures are empty
-    if not DIATOMS_DATA and not PAPER_JSON_FILES:
-        app.logger.warning("Data structures not initialized, reinitializing...")
-        initialize_data()
-
+    with data_lock:
+        if not DIATOMS_DATA and not PAPER_JSON_FILES:
+            app.logger.warning("Data structures not initialized, reinitializing...")
+            initialize_data()
 
 
 # Create an instance of GCPOps
