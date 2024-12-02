@@ -476,9 +476,12 @@ def download_labels():
 @app.route('/segmentation')
 def segmentation():
     """Route for the segmentation labeling interface"""
+    global DIATOMS_DATA  # Add this line to fix the global reference
+    
     try:
         if not DIATOMS_DATA:
             try:
+                # Try to reload the data
                 DIATOMS_DATA = ClaudeAI.get_DIATOMS_DATA(PAPERS_JSON_PUBLIC_URL)
             except Exception as e:
                 app.logger.error(f"Error loading diatoms data: {str(e)}")
