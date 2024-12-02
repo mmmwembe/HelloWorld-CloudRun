@@ -344,6 +344,7 @@ function DiatomSegmenter() {
                 }
             };
 
+
             const handleSave = async () => {
                 setIsSaving(true);
                 setSaveProgress(0);
@@ -356,6 +357,14 @@ function DiatomSegmenter() {
                     const segmentationText = generateSegmentationText();
                     const imageFileName = imageUrl.split('/').pop().replace(/\.[^/.]+$/, '');
                     
+                    // Create segmentation indices array from polygons
+                    const segmentationIndices = polygons.map((polygon, index) => ({
+                        index: index,
+                        label: polygon.label,
+                        points_count: polygon.points.length,
+                        label_text: getDiatomLabel(polygon.label)
+                    }));
+                    
                     const response = await fetch('/api/save_segmentation', {
                         method: 'POST',
                         headers: {
@@ -364,7 +373,8 @@ function DiatomSegmenter() {
                         body: JSON.stringify({
                             image_index: imageIndex,
                             segmentation_data: segmentationText,
-                            image_filename: imageFileName
+                            image_filename: imageFileName,
+                            segmentation_indices: segmentationIndices
                         })
                     });
                     
@@ -378,7 +388,8 @@ function DiatomSegmenter() {
                         setShowToast(true);
                         setImageData(prev => ({
                             ...prev,
-                            segmentation_url: data.segmentation_url
+                            segmentation_url: data.segmentation_url,
+                            segmentation_indices_array: data.segmentation_indices_array
                         }));
                     } else {
                         throw new Error(data.error || 'Failed to save segmentation');
@@ -393,6 +404,58 @@ function DiatomSegmenter() {
                     }, 500);
                 }
             };
+
+            // const handleSave = async () => {
+            //     setIsSaving(true);
+            //     setSaveProgress(0);
+                
+            //     const progressInterval = setInterval(() => {
+            //         setSaveProgress(prev => Math.min(prev + 10, 90));
+            //     }, 100);
+
+            //     try {
+            //         const segmentationText = generateSegmentationText();
+            //         const imageFileName = imageUrl.split('/').pop().replace(/\.[^/.]+$/, '');
+                    
+            //         const response = await fetch('/api/save_segmentation', {
+            //             method: 'POST',
+            //             headers: {
+            //                 'Content-Type': 'application/json',
+            //             },
+            //             body: JSON.stringify({
+            //                 image_index: imageIndex,
+            //                 segmentation_data: segmentationText,
+            //                 image_filename: imageFileName
+            //             })
+            //         });
+                    
+            //         const data = await response.json();
+            //         console.log('Save response:', data);
+                    
+            //         clearInterval(progressInterval);
+            //         setSaveProgress(100);
+                    
+            //         if (data.success) {
+            //             setShowToast(true);
+            //             setImageData(prev => ({
+            //                 ...prev,
+            //                 segmentation_url: data.segmentation_url
+            //             }));
+            //         } else {
+            //             throw new Error(data.error || 'Failed to save segmentation');
+            //         }
+            //     } catch (error) {
+            //         console.error('Error saving data:', error);
+            //         alert('Failed to save segmentation: ' + error.message);
+            //     } finally {
+            //         setTimeout(() => {
+            //             setIsSaving(false);
+            //             setSaveProgress(0);
+            //         }, 500);
+            //     }
+            // };
+
+
 
             const handlePrevious = () => {
                 setImageIndex(prev => Math.max(0, prev - 1));
