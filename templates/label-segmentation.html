@@ -472,6 +472,27 @@
                                     Next
                                 </button>
                             </div>
+
+
+                            {/* Add segmentation URL display */}
+                            {imageData?.segmentation_url && (
+                                <div className="mt-4 max-w-4xl w-full">
+                                    <div className="bg-gray-100 p-4 rounded-lg">
+                                        <p className="text-sm text-gray-600 font-semibold mb-1">Segmentation File URL:</p>
+                                        <a 
+                                            href={imageData.segmentation_url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-blue-600 hover:text-blue-800 break-all font-mono text-sm"
+                                        >
+                                            {imageData.segmentation_url}
+                                        </a>
+                                    </div>
+                                </div>
+                            )}
+
+
+
                         </div>
                     </div>
 
