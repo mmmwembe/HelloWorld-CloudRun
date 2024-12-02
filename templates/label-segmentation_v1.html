@@ -33,7 +33,7 @@
                                     name="diatom-type"
                                     value={option.value}
                                     checked={selected === option.value}
-                                    onChange={(e) => setSelected(Number(e.target.value))}
+                                    onChange={(e) => setSelected(parseInt(e.target.value, 10))}
                                     className="w-4 h-4 text-blue-600 cursor-pointer"
                                 />
                                 <span className="text-sm font-medium text-gray-700">
@@ -110,7 +110,7 @@
             const [imageData, setImageData] = React.useState(null);
             const [pendingSegmentationData, setPendingSegmentationData] = React.useState(null);
             const [selectedSegmentationIndex, setSelectedSegmentationIndex] = React.useState(null);
-            const [segmentationInfo, setSegmentationInfo] = React.useState([]); // Added state variable
+            const [segmentationInfo, setSegmentationInfo] = React.useState([]);
 
             const canvasRef = React.useRef(null);
             const imageRef = React.useRef(null);
@@ -142,7 +142,7 @@
                     }
                     return {
                         segmentationIndex: index,
-                        label: parseInt(label),
+                        label: parseInt(label, 10),
                         points,
                         color: getRandomColor()
                     };
@@ -193,13 +193,11 @@
                     canvas.height = container.offsetHeight;
                     
                     if (pendingSegmentationData) {
-                        console.log('Processing pending segmentation data');
                         const loadedPolygons = parseSegmentationFile(
                             pendingSegmentationData,
                             image.naturalWidth,
                             image.naturalHeight
                         );
-                        console.log('Loaded polygons:', loadedPolygons);
                         setPolygons(loadedPolygons);
                         setPendingSegmentationData(null);
                     }
@@ -215,10 +213,8 @@
                 const imageWidth = image.naturalWidth;
                 const imageHeight = image.naturalHeight;
                 
-                console.log('Generating segmentation text with dimensions:', imageWidth, imageHeight);
-                
                 return polygons.map(polygon => {
-                    if (polygon.points.length < 3) return ''; // Skip invalid polygons
+                    if (polygon.points.length < 3) return ''; 
                     
                     const normalizedPoints = polygon.points.map(point => {
                         const normalizedX = point.x / imageWidth;
@@ -239,7 +235,6 @@
 
                 try {
                     const segmentationText = generateSegmentationText();
-                    console.log('Saving segmentation text:', segmentationText);
                     
                     const imageFileName = imageUrl.split('/').pop().replace(/\.[^/.]+$/, '');
                     
@@ -256,7 +251,6 @@
                     });
                     
                     const data = await response.json();
-                    console.log('Save response:', data);
                     
                     clearInterval(progressInterval);
                     setSaveProgress(100);
@@ -359,12 +353,13 @@
                     );
 
                     if (distance < 20 && currentPolygon.length > 2) {
-                        setPolygons([...polygons, {
+                        const newPolygon = {
                             label: selectedType,
                             points: currentPolygon,
                             color: getRandomColor(),
                             segmentationIndex: polygons.length
-                        }]);
+                        };
+                        setPolygons([...polygons, newPolygon]);
                         setCurrentPolygon([]);
                         setIsDrawing(false);
                     } else {
@@ -383,10 +378,6 @@
                     setIsDrawing(false);
                     drawPolygons();
                 }
-            };
-
-            const handleSegmentationClick = (index) => {
-                setSelectedSegmentationIndex(index);
             };
 
             React.useEffect(() => {
@@ -409,6 +400,10 @@
             React.useEffect(() => {
                 drawPolygons();
             }, [polygons, currentPolygon, selectedType, selectedSegmentationIndex]);
+
+            const handleSegmentationClick = (index) => {
+                setSelectedSegmentationIndex(index);
+            };
 
             return (
                 <div className="flex h-screen bg-gray-200">
