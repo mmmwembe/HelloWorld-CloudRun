@@ -466,10 +466,7 @@ def download_labels():
 def display_json():
     return render_template('displayjson.html')
 
-# # Initialize data when the app starts
-# @app.before_first_request
-# def setup():
-#     initialize_data()
+
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
