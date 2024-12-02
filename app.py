@@ -29,6 +29,7 @@ PAPERS_BUCKET_LABELLING = 'papers-diatoms-labelling'
 PAPERS_BUCKET_JSON_FILES = 'papers-diatoms-jsons'
 BUCKET_EXTRACTED_IMAGES = 'papers-extracted-images-bucket-mmm'
 BUCKET_PAPER_TRACKER_CSV = 'papers-extracted-pages-csv-bucket-mmm'
+BUCKET_SEGMENTATION_LABELS='papers-diatoms-segmentation'
 
 # Global variables for data management
 PAPERS_JSON_PUBLIC_URL = f"https://storage.googleapis.com/{PAPERS_BUCKET_JSON_FILES}/jsons_from_pdfs/{SESSION_ID}/{SESSION_ID}.json"
@@ -310,6 +311,8 @@ def get_pdf_data():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+#-------------------------------------BOUNDING BOXES---------------------------------------------------------------------------------------
+
 @app.route('/diatoms_data')
 def see_diatoms_data():
     try:
@@ -467,7 +470,121 @@ def download_labels():
             
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+    
+#-----------------------------------------SEGMENTATION--------------------------------------------------------------------
 
+@app.route('/segmentation')
+def segmentation():
+    """Route for the segmentation labeling interface"""
+    try:
+        if not DIATOMS_DATA:
+            try:
+                DIATOMS_DATA = ClaudeAI.get_DIATOMS_DATA(PAPERS_JSON_PUBLIC_URL)
+            except Exception as e:
+                app.logger.error(f"Error loading diatoms data: {str(e)}")
+                return render_template('error.html', error="No diatom data available"), 404
+        
+        app.logger.info(f"Segmentation route: Found {len(DIATOMS_DATA)} diatom entries")
+        return render_template('label-segmentation.html')
+        
+    except Exception as e:
+        app.logger.error(f"Error in segmentation route: {str(e)}")
+        return render_template('error.html', error=str(e)), 500
+
+@app.route('/api/save_segmentation', methods=['POST'])
+def save_segmentation():
+    """Save segmentation data to GCS bucket and update DIATOMS_DATA"""
+    try:
+        data = request.json
+        image_index = data.get('image_index', 0)
+        segmentation_data = data.get('segmentation_data', '')
+        image_filename = data.get('image_filename', '')
+        
+        if not segmentation_data or not image_filename:
+            raise ValueError("Missing required data")
+            
+        # Save segmentation data to GCS bucket
+        segmentation_url = gcp_ops.save_segmentation_data(
+            segmentation_data=segmentation_data,
+            image_filename=image_filename,
+            session_id=SESSION_ID,
+            bucket_name=BUCKET_SEGMENTATION_LABELS
+        )
+        
+        if not segmentation_url:
+            raise Exception("Failed to save segmentation data to GCS")
+            
+        # Update DIATOMS_DATA with the segmentation URL
+        if 0 <= image_index < len(DIATOMS_DATA):
+            DIATOMS_DATA[image_index]['segmentation_url'] = segmentation_url
+            
+            # Update corresponding entry in PAPER_JSON_FILES
+            for paper in PAPER_JSON_FILES:
+                if 'diatoms_data' in paper:
+                    if isinstance(paper['diatoms_data'], str):
+                        paper['diatoms_data'] = json.loads(paper['diatoms_data'])
+                    
+                    if paper['diatoms_data'].get('image_url') == DIATOMS_DATA[image_index].get('image_url'):
+                        paper['diatoms_data']['segmentation_url'] = segmentation_url
+                        break
+            
+            # Save updated data to GCS
+            success = ClaudeAI.update_and_save_papers(
+                PAPERS_JSON_PUBLIC_URL,
+                PAPER_JSON_FILES,
+                DIATOMS_DATA
+            )
+            
+            if not success:
+                raise Exception("Failed to update papers data in GCS")
+                
+            return jsonify({
+                'success': True,
+                'message': 'Segmentation saved successfully',
+                'segmentation_url': segmentation_url
+            })
+            
+    except Exception as e:
+        app.logger.error(f"Error saving segmentation: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/download_segmentation')
+def download_segmentation():
+    """Download all segmentation data for current session"""
+    try:
+        # Create a temporary file containing all segmentation data
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as temp_file:
+            segmentation_data = [{
+                'image_url': item.get('image_url', ''),
+                'segmentation_url': item.get('segmentation_url', ''),
+                'image_width': item.get('image_width', ''),
+                'image_height': item.get('image_height', '')
+            } for item in DIATOMS_DATA if item.get('segmentation_url')]
+            
+            json.dump(segmentation_data, temp_file, indent=4)
+            temp_path = temp_file.name
+        
+        try:
+            response = send_file(
+                temp_path,
+                mimetype='application/json',
+                as_attachment=True,
+                download_name=f'segmentation_data_{SESSION_ID}.json'
+            )
+            os.unlink(temp_path)
+            return response
+        except Exception as e:
+            os.unlink(temp_path)
+            raise e
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+#-------------------------------------------------------------------------------------------------------------
 @app.route('/json')
 def display_json():
     return render_template('displayjson.html')
