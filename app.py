@@ -331,10 +331,24 @@ def see_diatoms_data():
 
 @app.route('/label', methods=['GET', 'POST'])
 def label():
+    global DIATOMS_DATA
+    
     if request.method == 'POST':
         updated_data = request.json
         save_labels(updated_data)
         return jsonify({'success': True})
+    
+    # Check if we have data before rendering the template
+    if not DIATOMS_DATA:
+        try:
+            # Try to reload the data
+            DIATOMS_DATA = ClaudeAI.get_DIATOMS_DATA(PAPERS_JSON_PUBLIC_URL)
+        except Exception as e:
+            app.logger.error(f"Error loading diatoms data: {str(e)}")
+            return render_template('error.html', error="No diatom data available"), 404
+    
+    # Log the data state
+    app.logger.info(f"Label route: Found {len(DIATOMS_DATA)} diatom entries")
     
     return render_template('label-react.html')
 
@@ -342,24 +356,48 @@ def label():
 def get_diatoms():
     try:
         image_index = request.args.get('index', 0, type=int)
-        current_data = DIATOMS_DATA
+        
+        # Use the global DIATOMS_DATA
+        global DIATOMS_DATA
         
         # Check if we have any data
-        if not current_data:
-            return jsonify({
-                'current_index': 0,
-                'total_images': 0,
-                'data': {},
-                'error': 'No diatoms data available'
-            })
+        if not DIATOMS_DATA:
+            try:
+                # Try to reload the data
+                DIATOMS_DATA = ClaudeAI.get_DIATOMS_DATA(PAPERS_JSON_PUBLIC_URL)
+                if not DIATOMS_DATA:
+                    return jsonify({
+                        'current_index': 0,
+                        'total_images': 0,
+                        'data': {},
+                        'error': 'No diatoms data available'
+                    })
+            except Exception as e:
+                app.logger.error(f"Error reloading diatoms data: {str(e)}")
+                return jsonify({
+                    'current_index': 0,
+                    'total_images': 0,
+                    'data': {},
+                    'error': 'Failed to load diatoms data'
+                })
         
         # Ensure index is within bounds
-        total_images = len(current_data)
+        total_images = len(DIATOMS_DATA)
         image_index = min(max(0, image_index), total_images - 1)
         
-        # Get the data for the current index
+        # Log the state
+        app.logger.info(f"Getting diatom data for index {image_index} of {total_images}")
+        
         try:
-            current_image_data = current_data[image_index]
+            current_image_data = DIATOMS_DATA[image_index]
+            # Log the data being sent
+            app.logger.info(f"Sending image data: {current_image_data.get('image_url', 'No URL')}")
+            
+            return jsonify({
+                'current_index': image_index,
+                'total_images': total_images,
+                'data': current_image_data
+            })
         except IndexError:
             app.logger.error(f"Failed to get data for index {image_index} from list of length {total_images}")
             return jsonify({
@@ -368,12 +406,6 @@ def get_diatoms():
                 'data': {},
                 'error': 'Invalid image index'
             })
-        
-        return jsonify({
-            'current_index': image_index,
-            'total_images': total_images,
-            'data': current_image_data
-        })
         
     except Exception as e:
         app.logger.error(f"Error in get_diatoms: {str(e)}")
