@@ -295,6 +295,7 @@
                 return options[labelValue] || 'Unknown';
             };
 
+
             const drawPolygons = () => {
                 const canvas = canvasRef.current;
                 if (!canvas) return;
@@ -302,7 +303,8 @@
                 const ctx = canvas.getContext('2d');
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-                polygons.forEach(polygon => {
+                // Draw completed polygons
+                polygons.forEach((polygon) => {
                     if (polygon.points.length < 3) return;
 
                     ctx.beginPath();
@@ -311,32 +313,79 @@
                         ctx.lineTo(polygon.points[i].x, polygon.points[i].y);
                     }
                     ctx.closePath();
-                    
+
                     const isSelected = selectedSegmentationIndex === polygon.segmentationIndex;
-                    
+
                     ctx.strokeStyle = isSelected ? '#ffffff' : polygon.color;
                     ctx.lineWidth = isSelected ? 3 : 2;
                     ctx.stroke();
-                    
+
+                    // Semi-transparent fill with more opacity for selected
                     ctx.fillStyle = `${polygon.color}${isSelected ? '80' : '40'}`;
                     ctx.fill();
                 });
 
+                // Draw current polygon being created
                 if (currentPolygon.length > 0) {
                     ctx.beginPath();
                     ctx.moveTo(currentPolygon[0].x, currentPolygon[0].y);
                     for (let i = 1; i < currentPolygon.length; i++) {
                         ctx.lineTo(currentPolygon[i].x, currentPolygon[i].y);
                     }
-                    if (isDrawing) {
-                        ctx.lineTo(currentPolygon[currentPolygon.length - 1].x, currentPolygon[currentPolygon.length - 1].y);
-                    }
-                    
-                    ctx.strokeStyle = '#2ecc71';
-                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = '#000';
+                    ctx.lineWidth = 1;
                     ctx.stroke();
                 }
             };
+
+
+
+            // const drawPolygons = () => {
+            //     const canvas = canvasRef.current;
+            //     if (!canvas) return;
+
+            //     const ctx = canvas.getContext('2d');
+            //     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            //     polygons.forEach(polygon => {
+            //         if (polygon.points.length < 3) return;
+
+            //         ctx.beginPath();
+            //         ctx.moveTo(polygon.points[0].x, polygon.points[0].y);
+            //         for (let i = 1; i < polygon.points.length; i++) {
+            //             ctx.lineTo(polygon.points[i].x, polygon.points[i].y);
+            //         }
+            //         ctx.closePath();
+                    
+            //         const isSelected = selectedSegmentationIndex === polygon.segmentationIndex;
+                    
+            //         ctx.strokeStyle = isSelected ? '#ffffff' : polygon.color;
+            //         ctx.lineWidth = isSelected ? 3 : 2;
+            //         ctx.stroke();
+                    
+            //         ctx.fillStyle = `${polygon.color}${isSelected ? '80' : '40'}`;
+            //         ctx.fill();
+            //     });
+
+            //     if (currentPolygon.length > 0) {
+            //         ctx.beginPath();
+            //         ctx.moveTo(currentPolygon[0].x, currentPolygon[0].y);
+            //         for (let i = 1; i < currentPolygon.length; i++) {
+            //             ctx.lineTo(currentPolygon[i].x, currentPolygon[i].y);
+            //         }
+            //         if (isDrawing) {
+            //             ctx.lineTo(currentPolygon[currentPolygon.length - 1].x, currentPolygon[currentPolygon.length - 1].y);
+            //         }
+                    
+            //         ctx.strokeStyle = '#2ecc71';
+            //         ctx.lineWidth = 2;
+            //         ctx.stroke();
+            //     }
+            // };
+
+
+
+
 
             const handleCanvasClick = (e) => {
                 const rect = canvasRef.current.getBoundingClientRect();
