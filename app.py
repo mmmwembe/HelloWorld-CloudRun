@@ -807,6 +807,27 @@ def upload_file():
 
 
 #---------------------------------------------------------------------------------------------
+#--------------------------------------- COLOSUS----------------------------------------------
+def fetch_and_process_data():
+    """Fetch data from the CSV URL and properly convert synonyms to string"""
+    url = "https://storage.googleapis.com/papers-diatoms-colossus/cvs/colossus.csv"
+    try:
+        df = pd.read_csv(url)
+        # Convert the synonyms column data type to string without splitting characters
+        df['synonyms'] = df['synonyms'].str.join('')
+        return df.to_dict('records')
+    except Exception as e:
+        print(f"Error fetching data: {e}")
+        return []
+
+@app.route('/colosus')
+def display_table():
+    """Route to display the auto-refreshing table"""
+    data = fetch_and_process_data()
+    return render_template('colosus.html', data=data)
+
+#-----------------------------------------------------------------------------------------------
+
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
