@@ -587,30 +587,68 @@ def save_segmentation():
             'error': str(e)
         }), 500
 
+# @app.route('/api/get_segmentation')
+# def get_segmentation():
+#     """Proxy route to fetch segmentation data from GCS"""
+#     try:
+#         url = request.args.get('url')
+#         if not url:
+#             raise ValueError("No URL provided")
+            
+#         logger.info(f"Attempting to load segmentation data from: {url}")
+        
+#         # Use the existing load_segmentation_data method
+#         content = gcp_ops.load_segmentation_data(url)
+        
+#         if content is None:
+#             logger.error(f"No segmentation data found at {url}")
+#             return jsonify({'error': 'Segmentation file not found'}), 404
+            
+#         logger.info(f"Successfully loaded segmentation data: {len(content)} characters")
+#         return content, 200, {'Content-Type': 'text/plain'}
+        
+#     except Exception as e:
+#         logger.error(f"Error in get_segmentation: {str(e)}")
+#         return jsonify({
+#             'error': f"Failed to fetch segmentation data: {str(e)}"
+#         }), 500
+
 @app.route('/api/get_segmentation')
 def get_segmentation():
-    """Proxy route to fetch segmentation data from GCS"""
+    """Proxy route to fetch segmentation annotations and indices from GCS"""
     try:
         url = request.args.get('url')
+        image_index = request.args.get('image_index', type=int)
+        
         if not url:
             raise ValueError("No URL provided")
             
-        logger.info(f"Attempting to load segmentation data from: {url}")
+        logger.info(f"Attempting to load segmentation annotations from: {url}")
         
-        # Use the existing load_segmentation_data method
-        content = gcp_ops.load_segmentation_data(url)
+        # Use the existing load_segmentation_data method but store as annotations
+        annotations = gcp_ops.load_segmentation_data(url)
         
-        if content is None:
-            logger.error(f"No segmentation data found at {url}")
-            return jsonify({'error': 'Segmentation file not found'}), 404
+        if annotations is None:
+            logger.error(f"No segmentation annotations found at {url}")
+            return jsonify({'error': 'Segmentation annotations not found'}), 404
+        
+        # Get the segmentation indices array from DIATOMS_DATA
+        segmentation_indices = None
+        if image_index is not None and 0 <= image_index < len(DIATOMS_DATA):
+            segmentation_indices = DIATOMS_DATA[image_index].get('segmentation_indices_array')
             
-        logger.info(f"Successfully loaded segmentation data: {len(content)} characters")
-        return content, 200, {'Content-Type': 'text/plain'}
+        logger.info(f"Successfully loaded segmentation annotations: {len(annotations)} characters")
+        logger.info(f"Segmentation indices: {segmentation_indices}")
+        
+        return jsonify({
+            'annotations': annotations,
+            'segmentation_indices_array': segmentation_indices
+        }), 200
         
     except Exception as e:
         logger.error(f"Error in get_segmentation: {str(e)}")
         return jsonify({
-            'error': f"Failed to fetch segmentation data: {str(e)}"
+            'error': f"Failed to fetch segmentation annotations: {str(e)}"
         }), 500
         
 # @app.route('/api/save_segmentation', methods=['POST'])

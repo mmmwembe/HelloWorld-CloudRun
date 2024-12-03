@@ -277,14 +277,25 @@ function DiatomSegmenter() {
                     if (data.data.segmentation_url) {
                         console.log('Found segmentation URL:', data.data.segmentation_url);
                         try {
-                            // Instead of fetching directly from GCS, proxy through your backend
-                            const segResponse = await fetch(`/api/get_segmentation?url=${encodeURIComponent(data.data.segmentation_url)}`);
+                            const segResponse = await fetch(
+                                `/api/get_segmentation?url=${encodeURIComponent(data.data.segmentation_url)}&image_index=${index}`
+                            );
                             if (!segResponse.ok) {
                                 throw new Error('Failed to fetch segmentation data');
                             }
-                            const segText = await segResponse.text();
-                            console.log('Loaded segmentation text:', segText);
-                            setPendingSegmentationData(segText);
+                            const segData = await segResponse.json();
+                            console.log('Loaded segmentation data:', segData);
+                            
+                            // Set the pending segmentation data from annotations
+                            setPendingSegmentationData(segData.annotations);
+                            
+                            // If we have indices, store them in imageData
+                            if (segData.segmentation_indices_array) {
+                                setImageData(prev => ({
+                                    ...prev,
+                                    segmentation_indices_array: segData.segmentation_indices_array
+                                }));
+                            }
                         } catch (error) {
                             console.error('Error loading segmentation data:', error);
                             setPendingSegmentationData(null);
@@ -299,6 +310,48 @@ function DiatomSegmenter() {
                     console.error('Error loading image data:', error);
                 }
             };
+
+            // const loadImageData = async (index) => {
+            //     try {
+            //         const response = await fetch(`/api/diatoms?index=${index}`);
+            //         const data = await response.json();
+            //         if (data.error) {
+            //             console.error('API Error:', data.error);
+            //             return;
+            //         }
+            //         console.log('Loaded image data:', data.data);
+                    
+            //         setImageUrl(data.data.image_url);
+            //         setImageData(data.data);
+            //         setTotalImages(data.total_images);
+            //         setImageIndex(data.current_index);
+            //         setSelectedSegmentIndex(null);
+                    
+            //         if (data.data.segmentation_url) {
+            //             console.log('Found segmentation URL:', data.data.segmentation_url);
+            //             try {
+            //                 // Instead of fetching directly from GCS, proxy through your backend
+            //                 const segResponse = await fetch(`/api/get_segmentation?url=${encodeURIComponent(data.data.segmentation_url)}`);
+            //                 if (!segResponse.ok) {
+            //                     throw new Error('Failed to fetch segmentation data');
+            //                 }
+            //                 const segText = await segResponse.text();
+            //                 console.log('Loaded segmentation text:', segText);
+            //                 setPendingSegmentationData(segText);
+            //             } catch (error) {
+            //                 console.error('Error loading segmentation data:', error);
+            //                 setPendingSegmentationData(null);
+            //                 setPolygons([]);
+            //             }
+            //         } else {
+            //             console.log('No segmentation URL found');
+            //             setPendingSegmentationData(null);
+            //             setPolygons([]);
+            //         }
+            //     } catch (error) {
+            //         console.error('Error loading image data:', error);
+            //     }
+            // };
             
             // const loadImageData = async (index) => {
             //     try {
