@@ -12,6 +12,7 @@ from modules import GCPOps
 from modules import PDFOps
 import logging
 import pandas as pd
+import shutil
 
 # Configure logging
 logging.basicConfig(
@@ -745,10 +746,29 @@ def preview_pdf(blob_name):
     """Render a page to preview the PDF"""
     return render_template('pdf_viewer.html', pdf_url=url_for('view_pdf', blob_name=blob_name))
 
+def ensure_clean_temp_dir(tmp_dir):
+    """
+    Ensures a clean temporary directory exists.
+    If it exists, removes it and recreates it.
+    If it doesn't exist, creates it.
+    """
+    if os.path.exists(tmp_dir):
+        try:
+            shutil.rmtree(tmp_dir)
+        except Exception as e:
+            print(f"Error cleaning temporary directory: {e}")
+            # If we can't remove it, try to work with existing directory
+            return
+    
+    try:
+        os.makedirs(tmp_dir)
+    except Exception as e:
+        print(f"Error creating temporary directory: {e}")
+        raise
+
 @app.route('/upload_pdfs', methods=['GET', 'POST'])
 def upload_file():
     if request.method == 'POST':
-        # check if any file was uploaded
         if 'files[]' not in request.files:
             flash('No files selected')
             return redirect(request.url)
@@ -762,12 +782,17 @@ def upload_file():
         upload_count = 0
         error_count = 0
         
-        # Create the base upload folder with exist_ok=True
+        # Ensure base upload folder exists
         os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
         
-        # Create the session-specific temporary directory with exist_ok=True
+        # Create a clean temporary directory for this session
         TMP_DIR = os.path.join(app.config['UPLOAD_FOLDER'], SESSION_ID)
-        os.makedirs(TMP_DIR, exist_ok=True)
+        try:
+            ensure_clean_temp_dir(TMP_DIR)
+        except Exception as e:
+            flash('Error preparing upload directory')
+            print(f"Directory preparation error: {e}")
+            return redirect(request.url)
         
         for file in files:
             if file and allowed_file(file.filename):
@@ -776,24 +801,35 @@ def upload_file():
                 
                 try:
                     file.save(temp_path)
-                    
-                    blob_name, public_url = gcp_ops.save_pdf_file_to_bucket(temp_path, PAPERS_BUCKET, SESSION_ID)
-                    
-                    # Clean up the temporary file
-                    if os.path.exists(temp_path):
-                        os.remove(temp_path)
+                    blob_name, public_url = gcp_ops.save_pdf_file_to_bucket(
+                        temp_path, 
+                        PAPERS_BUCKET, 
+                        SESSION_ID
+                    )
                     
                     if blob_name:
                         upload_count += 1
                     else:
                         error_count += 1
+                        
                 except Exception as e:
                     print(f"Error processing file {filename}: {e}")
                     error_count += 1
+                finally:
+                    # Clean up temporary file regardless of success/failure
                     if os.path.exists(temp_path):
-                        os.remove(temp_path)
+                        try:
+                            os.remove(temp_path)
+                        except Exception as e:
+                            print(f"Error removing temporary file {temp_path}: {e}")
             else:
                 error_count += 1
+        
+        # Clean up the temporary directory after all files are processed
+        try:
+            shutil.rmtree(TMP_DIR)
+        except Exception as e:
+            print(f"Error removing temporary directory {TMP_DIR}: {e}")
         
         if upload_count > 0:
             flash(f'Successfully uploaded {upload_count} file(s)')
@@ -802,6 +838,7 @@ def upload_file():
         
         return redirect(url_for('upload_file'))
 
+    # GET request handling
     files = gcp_ops.get_uploaded_files(PAPERS_BUCKET, SESSION_ID)
     return render_template('upload_images.html', files=files)
 
