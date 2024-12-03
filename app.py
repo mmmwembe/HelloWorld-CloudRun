@@ -762,25 +762,26 @@ def upload_file():
         upload_count = 0
         error_count = 0
         
+        # Create the base upload folder with exist_ok=True
         os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+        
+        # Create the session-specific temporary directory with exist_ok=True
+        TMP_DIR = os.path.join(app.config['UPLOAD_FOLDER'], SESSION_ID)
+        os.makedirs(TMP_DIR, exist_ok=True)
         
         for file in files:
             if file and allowed_file(file.filename):
                 filename = secure_filename(file.filename)
-                TMP_DIR = os.path.join(app.config['UPLOAD_FOLDER'], SESSION_ID)
-                os.makedirs(TMP_DIR)
-                temp_path = os.path.join(TMP_DIR,filename)
+                temp_path = os.path.join(TMP_DIR, filename)
                 
                 try:
                     file.save(temp_path)
-
-                    blob_name,public_url = gcp_ops.save_pdf_file_to_bucket(temp_path, PAPERS_BUCKET, SESSION_ID)
-                    #file_public_url = save_file_to_bucket(temp_path, SESSION_ID, FILE_HASH_NUM, BUCKET_NAME, subdir="papers")
                     
-                    # Update PARENT_FILES_PD
-                    #update_uploaded_files_tracking(public_url)
+                    blob_name, public_url = gcp_ops.save_pdf_file_to_bucket(temp_path, PAPERS_BUCKET, SESSION_ID)
                     
-                    os.remove(temp_path)
+                    # Clean up the temporary file
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
                     
                     if blob_name:
                         upload_count += 1
@@ -801,10 +802,8 @@ def upload_file():
         
         return redirect(url_for('upload_file'))
 
-    files = gcp_ops.get_uploaded_files(PAPERS_BUCKET,SESSION_ID)
-    #files = get_public_urls2(BUCKET_NAME, SESSION_ID, FILE_HASH_NUM)
+    files = gcp_ops.get_uploaded_files(PAPERS_BUCKET, SESSION_ID)
     return render_template('upload_images.html', files=files)
-
 
 #---------------------------------------------------------------------------------------------
 #--------------------------------------- COLOSUS----------------------------------------------
