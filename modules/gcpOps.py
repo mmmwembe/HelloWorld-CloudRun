@@ -540,3 +540,42 @@ class GCPOps:
         except Exception as e:
             print(f"Error uploading file: {e}") 
             return None
+        
+
+    def update_paper_json_files(self, PAPER_JSON_FILES, TEMP_JSON_FILES):
+        """
+        Update PAPER_JSON_FILES by adding elements from TEMP_JSON_FILES.
+        If an element with the same 'pdf_file_url' exists in PAPER_JSON_FILES, it will be overwritten.
+
+        :param PAPER_JSON_FILES: List of existing paper JSON objects
+        :param TEMP_JSON_FILES: List of temporary paper JSON objects to add or update
+        :return: Updated list of PAPER_JSON_FILES
+        """
+        # Create a dictionary for faster lookups by pdf_file_url in PAPER_JSON_FILES
+        paper_files_dict = {paper['pdf_file_url']: paper for paper in PAPER_JSON_FILES}
+
+        # Iterate through TEMP_JSON_FILES and update or append to PAPER_JSON_FILES
+        for temp_paper in TEMP_JSON_FILES:
+            pdf_url = temp_paper['pdf_file_url']
+            # Update or add the paper to the dictionary
+            paper_files_dict[pdf_url] = temp_paper
+
+        # Convert the dictionary back to a list
+        updated_paper_json_files = list(paper_files_dict.values())
+
+        return updated_paper_json_files
+    
+    
+    
+    # Example usage
+    # PAPER_JSON_FILES = gcp_ops.load_paper_json_files(papers_json_public_url)
+    # TEMP_JSON_FILES = [
+    #     {"pdf_file_url": "https://example.com/image2.pdf", "new_field": "new_value"},
+    #     {"pdf_file_url": "https://example.com/image5.pdf", "new_field": "new_value"}
+    # ]
+
+    # # Call the function to update PAPER_JSON_FILES
+    # PAPER_JSON_FILES = update_paper_json_files(PAPER_JSON_FILES, TEMP_JSON_FILES)
+
+    # # Save the updated list back to the GCP bucket
+    # gcp_ops.save_paper_json_files(papers_json_public_url, PAPER_JSON_FILES)
