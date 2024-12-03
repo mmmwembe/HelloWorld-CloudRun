@@ -113,6 +113,7 @@ def process_pdfs(pdf_urls):
     """Background task to process PDFs"""
     global processing_status, PAPER_JSON_FILES
     
+    TEMP_JSON_FILES =[]
     for i, url in enumerate(pdf_urls, 1):
         processing_status['current_index'] = i
         processing_status['current_url'] = url
@@ -124,7 +125,7 @@ def process_pdfs(pdf_urls):
             papers_json_public_url = f"https://storage.googleapis.com/{PAPERS_BUCKET_JSON_FILES}/jsons_from_pdfs/{SESSION_ID}/{SESSION_ID}.json"
     
             # Load existing PAPER_JSON_FILES
-            PAPER_JSON_FILES = gcp_ops.load_paper_json_files(papers_json_public_url)
+            
             
             # Extract text and images
             full_text, first_two_pages_text, filename = pdf_ops.extract_text_from_pdf(url)
@@ -150,7 +151,8 @@ def process_pdfs(pdf_urls):
             }
             
             # Update PAPER_JSON_FILES and save
-            PAPER_JSON_FILES.append(pdf_paper_json)
+            # PAPER_JSON_FILES.append(pdf_paper_json)
+            TEMP_JSON_FILES.append(pdf_paper_json)
                   
             # Update processing status
             processing_status.update({
@@ -181,6 +183,8 @@ def process_pdfs(pdf_urls):
     
     processing_status['complete'] = True
     # Save paper jons to GCP
+    PAPER_JSON_FILES.extend(TEMP_JSON_FILES)
+    PAPER_JSON_FILES = gcp_ops.load_paper_json_files(papers_json_public_url)
     papers_json_public_url = gcp_ops.save_paper_json_files(papers_json_public_url, PAPER_JSON_FILES)
 
 def save_labels(updated_data):
