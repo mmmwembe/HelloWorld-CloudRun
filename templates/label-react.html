@@ -362,12 +362,36 @@
             return (
                 <div className="flex h-screen bg-gray-200">
                     <div className="w-64 bg-gray-800 fixed h-full">
-                        <img 
-                            src="/static/diatomhub-images/logo/diatom_hub_5e.svg" 
-                            alt="DiatomHub Logo" 
-                            className="w-4/5 mx-auto mt-5"
-                        />
-                    </div>
+                            <img 
+                                src="/static/diatomhub-images/logo/diatom_hub_5e.svg" 
+                                alt="DiatomHub Logo" 
+                                className="w-4/5 mx-auto mt-5"
+                            />
+                            
+                            {/* Add navigation buttons here */}
+                            <div className="flex flex-col gap-3 px-4 mt-6">
+                                <a href="/modules" 
+                                className="px-4 py-3 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors duration-200">
+                                    View Installed Modules
+                                </a>
+                                <a href="/all_papers" 
+                                className="px-4 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-md hover:bg-white/10 transition-colors duration-200">
+                                    View Papers
+                                </a>
+                                <a href="/view_uploaded_pdfs" 
+                                className="px-4 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-md hover:bg-white/10 transition-colors duration-200">
+                                    View Uploaded PDFs
+                                </a>
+                                <a href="/diatoms_data" 
+                                className="px-4 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-md hover:bg-white/10 transition-colors duration-200">
+                                    View Diatoms Data
+                                </a>
+                                <a href="/label" 
+                                className="px-4 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-md hover:bg-white/10 transition-colors duration-200">
+                                    Label Images
+                                </a>
+                            </div>
+                        </div>
 
                     <div className="flex-1 ml-64 mr-96">
                         <div className="flex flex-col items-center justify-center min-h-screen p-5">
