@@ -130,716 +130,507 @@
 
 // Main DiatomSegmenter Component
 function DiatomSegmenter() {
-            // State declarations
-            const [imageIndex, setImageIndex] = React.useState(0);
-            const [totalImages, setTotalImages] = React.useState(0);
-            const [polygons, setPolygons] = React.useState([]);
-            const [currentPolygon, setCurrentPolygon] = React.useState([]);
-            const [isDrawing, setIsDrawing] = React.useState(false);
-            const [imageUrl, setImageUrl] = React.useState('');
-            const [isSaving, setIsSaving] = React.useState(false);
-            const [saveProgress, setSaveProgress] = React.useState(0);
-            const [showToast, setShowToast] = React.useState(false);
-            const [selectedType, setSelectedType] = React.useState(2);
-            const [imageData, setImageData] = React.useState(null);
-            const [pendingSegmentationData, setPendingSegmentationData] = React.useState(null);
-            const [selectedSegmentIndex, setSelectedSegmentIndex] = React.useState(null);
-            
-            // Refs
-            const canvasRef = React.useRef(null);
-            const imageRef = React.useRef(null);
-            const containerRef = React.useRef(null);
+    // State declarations
+    const [imageIndex, setImageIndex] = React.useState(0);
+    const [totalImages, setTotalImages] = React.useState(0);
+    const [polygons, setPolygons] = React.useState([]);
+    const [currentPolygon, setCurrentPolygon] = React.useState([]);
+    const [isDrawing, setIsDrawing] = React.useState(false);
+    const [imageUrl, setImageUrl] = React.useState('');
+    const [isSaving, setIsSaving] = React.useState(false);
+    const [saveProgress, setSaveProgress] = React.useState(0);
+    const [showToast, setShowToast] = React.useState(false);
+    const [selectedType, setSelectedType] = React.useState(2);
+    const [imageData, setImageData] = React.useState(null);
+    const [pendingSegmentationData, setPendingSegmentationData] = React.useState(null);
+    const [selectedSegmentIndex, setSelectedSegmentIndex] = React.useState(null);
+    
+    // Refs
+    const canvasRef = React.useRef(null);
+    const imageRef = React.useRef(null);
+    const containerRef = React.useRef(null);
 
-            // Utility functions
-            const getRandomColor = () => {
-                const colors = ['#2ecc71', '#e74c3c', '#3498db', '#f1c40f', '#9b59b6', '#1abc9c'];
-                return colors[Math.floor(Math.random() * colors.length)];
-            };
+    // Utility functions
+    const getRandomColor = () => {
+        const colors = ['#2ecc71', '#e74c3c', '#3498db', '#f1c40f', '#9b59b6', '#1abc9c'];
+        return colors[Math.floor(Math.random() * colors.length)];
+    };
 
-            const getDiatomLabel = (value) => {
-                const labels = {
-                    0: 'Diatom',
-                    1: 'Incomplete Diatom',
-                    2: 'Complete Diatom',
-                    3: 'Fragment Diatom',
-                    4: 'Blurred Diatom',
-                    5: 'Diatom SideView'
-                };
-                return labels[value] || 'Unknown';
-            };
+    const getDiatomLabel = (value) => {
+        const labels = {
+            0: 'Diatom',
+            1: 'Incomplete Diatom',
+            2: 'Complete Diatom',
+            3: 'Fragment Diatom',
+            4: 'Blurred Diatom',
+            5: 'Diatom SideView'
+        };
+        return labels[value] || 'Unknown';
+    };
 
-            const parseSegmentationFile = (content, imageWidth, imageHeight) => {
-                if (!content.trim()) return [];
-                
-                const lines = content.trim().split('\n');
-                return lines.map(line => {
-                    const [label, ...coords] = line.split(' ');
-                    const points = [];
-                    for (let i = 0; i < coords.length; i += 2) {
-                        if (coords[i] && coords[i+1]) {
-                            const x = parseFloat(coords[i]);
-                            const y = parseFloat(coords[i + 1]);
-                            points.push({
-                                x: x * imageWidth,
-                                y: y * imageHeight
-                            });
-                        }
-                    }
-                    return {
-                        label: parseInt(label),
-                        points,
-                        color: getRandomColor()
-                    };
-                }).filter(polygon => polygon.points.length >= 3);
-            };
-
-            const generateSegmentationText = () => {
-                const image = imageRef.current;
-                if (!image) return '';
-                
-                const imageWidth = image.naturalWidth;
-                const imageHeight = image.naturalHeight;
-                
-                return polygons.map(polygon => {
-                    if (polygon.points.length < 3) return '';
-                    
-                    const normalizedPoints = polygon.points.map(point => {
-                        const normalizedX = point.x / imageWidth;
-                        const normalizedY = point.y / imageHeight;
-                        return `${normalizedX.toFixed(6)} ${normalizedY.toFixed(6)}`;
-                    }).join(' ');
-                    return `${polygon.label} ${normalizedPoints}`;
-                }).filter(Boolean).join('\n');
-            };
-
-            // const loadImageData = async (index) => {
-            //     try {
-            //         const response = await fetch(`/api/diatoms?index=${index}`);
-            //         const data = await response.json();
-            //         if (data.error) {
-            //             console.error('API Error:', data.error);
-            //             return;
-            //         }
-            //         console.log('Loaded image data:', data.data);
-                    
-            //         setImageUrl(data.data.image_url);
-            //         setImageData(data.data);
-            //         setTotalImages(data.total_images);
-            //         setImageIndex(data.current_index);
-            //         setSelectedSegmentIndex(null);
-                    
-            //         if (data.data.segmentation_url) {
-            //             console.log('Found segmentation URL:', data.data.segmentation_url);
-            //             try {
-            //                 const segResponse = await fetch(data.data.segmentation_url);
-            //                 if (!segResponse.ok) {
-            //                     throw new Error('Failed to fetch segmentation data');
-            //                 }
-            //                 const segText = await segResponse.text();
-            //                 console.log('Loaded segmentation text:', segText);
-            //                 setPendingSegmentationData(segText);
-                            
-            //                 // Also check if we have existing segmentation indices
-            //                 if (data.data.segmentation_indices_array) {
-            //                     console.log('Found segmentation indices:', data.data.segmentation_indices_array);
-            //                 }
-            //             } catch (error) {
-            //                 console.error('Error loading segmentation data:', error);
-            //                 setPendingSegmentationData(null);
-            //                 setPolygons([]);
-            //             }
-            //         } else {
-            //             console.log('No segmentation URL found');
-            //             setPendingSegmentationData(null);
-            //             setPolygons([]);
-            //         }
-            //     } catch (error) {
-            //         console.error('Error loading image data:', error);
-            //     }
-            // };
-
-            const loadImageData = async (index) => {
-                try {
-                    const response = await fetch(`/api/diatoms?index=${index}`);
-                    const data = await response.json();
-                    if (data.error) {
-                        console.error('API Error:', data.error);
-                        return;
-                    }
-                    console.log('Loaded image data:', data.data);
-                    
-                    setImageUrl(data.data.image_url);
-                    setImageData(data.data);
-                    setTotalImages(data.total_images);
-                    setImageIndex(data.current_index);
-                    setSelectedSegmentIndex(null);
-                    
-                    if (data.data.segmentation_url) {
-                        console.log('Found segmentation URL:', data.data.segmentation_url);
-                        try {
-                            const segResponse = await fetch(
-                                `/api/get_segmentation?url=${encodeURIComponent(data.data.segmentation_url)}&image_index=${index}`
-                            );
-                            if (!segResponse.ok) {
-                                throw new Error('Failed to fetch segmentation data');
-                            }
-                            const segData = await segResponse.json();
-                            console.log('Loaded segmentation data:', segData);
-                            
-                            // Set the pending segmentation data from annotations
-                            setPendingSegmentationData(segData.annotations);
-                            
-                            // If we have indices, store them in imageData
-                            if (segData.segmentation_indices_array) {
-                                setImageData(prev => ({
-                                    ...prev,
-                                    segmentation_indices_array: segData.segmentation_indices_array
-                                }));
-                            }
-                        } catch (error) {
-                            console.error('Error loading segmentation data:', error);
-                            setPendingSegmentationData(null);
-                            setPolygons([]);
-                        }
-                    } else {
-                        console.log('No segmentation URL found');
-                        setPendingSegmentationData(null);
-                        setPolygons([]);
-                    }
-                } catch (error) {
-                    console.error('Error loading image data:', error);
-                }
-            };
-
-            // const loadImageData = async (index) => {
-            //     try {
-            //         const response = await fetch(`/api/diatoms?index=${index}`);
-            //         const data = await response.json();
-            //         if (data.error) {
-            //             console.error('API Error:', data.error);
-            //             return;
-            //         }
-            //         console.log('Loaded image data:', data.data);
-                    
-            //         setImageUrl(data.data.image_url);
-            //         setImageData(data.data);
-            //         setTotalImages(data.total_images);
-            //         setImageIndex(data.current_index);
-            //         setSelectedSegmentIndex(null);
-                    
-            //         if (data.data.segmentation_url) {
-            //             console.log('Found segmentation URL:', data.data.segmentation_url);
-            //             try {
-            //                 // Instead of fetching directly from GCS, proxy through your backend
-            //                 const segResponse = await fetch(`/api/get_segmentation?url=${encodeURIComponent(data.data.segmentation_url)}`);
-            //                 if (!segResponse.ok) {
-            //                     throw new Error('Failed to fetch segmentation data');
-            //                 }
-            //                 const segText = await segResponse.text();
-            //                 console.log('Loaded segmentation text:', segText);
-            //                 setPendingSegmentationData(segText);
-            //             } catch (error) {
-            //                 console.error('Error loading segmentation data:', error);
-            //                 setPendingSegmentationData(null);
-            //                 setPolygons([]);
-            //             }
-            //         } else {
-            //             console.log('No segmentation URL found');
-            //             setPendingSegmentationData(null);
-            //             setPolygons([]);
-            //         }
-            //     } catch (error) {
-            //         console.error('Error loading image data:', error);
-            //     }
-            // };
-            
-            // const loadImageData = async (index) => {
-            //     try {
-            //         const response = await fetch(`/api/diatoms?index=${index}`);
-            //         const data = await response.json();
-            //         if (data.error) {
-            //             console.error('API Error:', data.error);
-            //             return;
-            //         }
-            //         setImageUrl(data.data.image_url);
-            //         setImageData(data.data);
-            //         setTotalImages(data.total_images);
-            //         setImageIndex(data.current_index);
-            //         setSelectedSegmentIndex(null);
-                    
-            //         if (data.data.segmentation_url) {
-            //             try {
-            //                 const segResponse = await fetch(data.data.segmentation_url);
-            //                 if (!segResponse.ok) {
-            //                     throw new Error('Failed to fetch segmentation data');
-            //                 }
-            //                 const segText = await segResponse.text();
-            //                 setPendingSegmentationData(segText);
-            //             } catch (error) {
-            //                 console.error('Error loading segmentation data:', error);
-            //                 setPendingSegmentationData(null);
-            //                 setPolygons([]);
-            //             }
-            //         } else {
-            //             setPendingSegmentationData(null);
-            //             setPolygons([]);
-            //         }
-            //     } catch (error) {
-            //         console.error('Error loading image data:', error);
-            //     }
-            // };
-
-            const handleImageLoad = () => {
-                const canvas = canvasRef.current;
-                const container = containerRef.current;
-                const image = imageRef.current;
-                
-                console.log('Image loaded, handling load event');
-                
-                if (canvas && container && image) {
-                    console.log('Canvas dimensions:', container.offsetWidth, container.offsetHeight);
-                    canvas.width = container.offsetWidth;
-                    canvas.height = container.offsetHeight;
-                    
-                    if (pendingSegmentationData) {
-                        console.log('Processing pending segmentation data');
-                        const loadedPolygons = parseSegmentationFile(
-                            pendingSegmentationData,
-                            image.naturalWidth,
-                            image.naturalHeight
-                        );
-                        console.log('Created polygons from segmentation data:', loadedPolygons);
-                        setPolygons(loadedPolygons);
-                        setPendingSegmentationData(null);
-                    } else {
-                        console.log('No pending segmentation data to process');
-                    }
-                    
-                    drawPolygons();
-                }
-            };            
-
-            // const handleImageLoad = () => {
-            //     const canvas = canvasRef.current;
-            //     const container = containerRef.current;
-            //     const image = imageRef.current;
-                
-            //     if (canvas && container && image) {
-            //         canvas.width = container.offsetWidth;
-            //         canvas.height = container.offsetHeight;
-                    
-            //         if (pendingSegmentationData) {
-            //             const loadedPolygons = parseSegmentationFile(
-            //                 pendingSegmentationData,
-            //                 image.naturalWidth,
-            //                 image.naturalHeight
-            //             );
-            //             setPolygons(loadedPolygons);
-            //             setPendingSegmentationData(null);
-            //         }
-                    
-            //         drawPolygons();
-            //     }
-            // };
-
-
-
-            const drawPolygons = () => {
-                const canvas = canvasRef.current;
-                if (!canvas) return;
-
-                const ctx = canvas.getContext('2d');
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-                // Draw completed polygons
-                polygons.forEach((polygon, index) => {
-                    if (polygon.points.length < 3) return;
-
-                    ctx.beginPath();
-                    ctx.moveTo(polygon.points[0].x, polygon.points[0].y);
-                    for (let i = 1; i < polygon.points.length; i++) {
-                        ctx.lineTo(polygon.points[i].x, polygon.points[i].y);
-                    }
-                    ctx.closePath();
-                    
-                    const isSelected = index === selectedSegmentIndex;
-                    
-                    if (isSelected) {
-                        ctx.strokeStyle = '#ffffff';
-                        ctx.lineWidth = 4;
-                        ctx.stroke();
-                        
-                        ctx.strokeStyle = polygon.color;
-                        ctx.lineWidth = 2;
-                        ctx.stroke();
-                        
-                        ctx.fillStyle = `${polygon.color}80`;
-                    } else {
-                        ctx.strokeStyle = polygon.color;
-                        ctx.lineWidth = 2;
-                        ctx.stroke();
-                        
-                        ctx.fillStyle = `${polygon.color}40`;
-                    }
-                    ctx.fill();
-                    
-                    if (isSelected) {
-                        const centerX = polygon.points.reduce((sum, p) => sum + p.x, 0) / polygon.points.length;
-                        const centerY = polygon.points.reduce((sum, p) => sum + p.y, 0) / polygon.points.length;
-                        
-                        ctx.font = '14px Arial';
-                        ctx.textAlign = 'center';
-                        ctx.textBaseline = 'middle';
-                        ctx.fillStyle = '#ffffff';
-                        ctx.strokeStyle = '#000000';
-                        ctx.lineWidth = 3;
-                        
-                        const text = `${index + 1}. ${getDiatomLabel(polygon.label)}`;
-                        ctx.strokeText(text, centerX, centerY);
-                        ctx.fillText(text, centerX, centerY);
-                    }
-                });
-
-                // Draw current polygon being created
-                if (currentPolygon.length > 0) {
-                    ctx.beginPath();
-                    ctx.moveTo(currentPolygon[0].x, currentPolygon[0].y);
-                    for (let i = 1; i < currentPolygon.length; i++) {
-                        ctx.lineTo(currentPolygon[i].x, currentPolygon[i].y);
-                    }
-                    if (isDrawing) {
-                        ctx.lineTo(currentPolygon[currentPolygon.length - 1].x, currentPolygon[currentPolygon.length - 1].y);
-                    }
-                    
-                    ctx.strokeStyle = '#2ecc71';
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
-                }
-            };
-
-
-            const handleSave = async () => {
-                setIsSaving(true);
-                setSaveProgress(0);
-                
-                const progressInterval = setInterval(() => {
-                    setSaveProgress(prev => Math.min(prev + 10, 90));
-                }, 100);
-
-                try {
-                    const segmentationText = generateSegmentationText();
-                    const imageFileName = imageUrl.split('/').pop().replace(/\.[^/.]+$/, '');
-                    
-                    // Create segmentation indices array from polygons
-                    const segmentationIndices = polygons.map((polygon, index) => ({
-                        index: index,
-                        label: polygon.label,
-                        points_count: polygon.points.length,
-                        label_text: getDiatomLabel(polygon.label)
-                    }));
-                    
-                    const response = await fetch('/api/save_segmentation', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            image_index: imageIndex,
-                            segmentation_data: segmentationText,
-                            image_filename: imageFileName,
-                            segmentation_indices: segmentationIndices
-                        })
+    const parseSegmentationFile = (content, imageWidth, imageHeight) => {
+        if (!content.trim()) return [];
+        
+        const lines = content.trim().split('\n');
+        return lines.map(line => {
+            const [label, ...coords] = line.split(' ');
+            const points = [];
+            for (let i = 0; i < coords.length; i += 2) {
+                if (coords[i] && coords[i+1]) {
+                    const x = parseFloat(coords[i]);
+                    const y = parseFloat(coords[i + 1]);
+                    points.push({
+                        x: x * imageWidth,
+                        y: y * imageHeight
                     });
+                }
+            }
+            return {
+                label: parseInt(label),
+                points,
+                color: getRandomColor()
+            };
+        }).filter(polygon => polygon.points.length >= 3);
+    };
+
+    const generateSegmentationTextFromPolygons = (polygonArray) => {
+        const image = imageRef.current;
+        if (!image) return '';
+        
+        const imageWidth = image.naturalWidth;
+        const imageHeight = image.naturalHeight;
+        
+        return polygonArray.map(polygon => {
+            if (polygon.points.length < 3) return '';
+            
+            const normalizedPoints = polygon.points.map(point => {
+                const normalizedX = point.x / imageWidth;
+                const normalizedY = point.y / imageHeight;
+                return `${normalizedX.toFixed(6)} ${normalizedY.toFixed(6)}`;
+            }).join(' ');
+            return `${polygon.label} ${normalizedPoints}`;
+        }).filter(Boolean).join('\n');
+    };
+
+    const loadImageData = async (index) => {
+        try {
+            const response = await fetch(`/api/diatoms?index=${index}`);
+            const data = await response.json();
+            if (data.error) {
+                console.error('API Error:', data.error);
+                return;
+            }
+            
+            setImageUrl(data.data.image_url);
+            setImageData(data.data);
+            setTotalImages(data.total_images);
+            setImageIndex(data.current_index);
+            setSelectedSegmentIndex(null);
+            
+            if (data.data.segmentation_url) {
+                try {
+                    const segResponse = await fetch(
+                        `/api/get_segmentation?url=${encodeURIComponent(data.data.segmentation_url)}&image_index=${index}`
+                    );
+                    if (!segResponse.ok) {
+                        throw new Error('Failed to fetch segmentation data');
+                    }
+                    const segData = await segResponse.json();
                     
-                    const data = await response.json();
-                    console.log('Save response:', data);
+                    setPendingSegmentationData(segData.annotations);
                     
-                    clearInterval(progressInterval);
-                    setSaveProgress(100);
-                    
-                    if (data.success) {
-                        setShowToast(true);
+                    if (segData.segmentation_indices_array) {
                         setImageData(prev => ({
                             ...prev,
-                            segmentation_url: data.segmentation_url,
-                            segmentation_indices_array: data.segmentation_indices_array
+                            segmentation_indices_array: segData.segmentation_indices_array
                         }));
-                    } else {
-                        throw new Error(data.error || 'Failed to save segmentation');
                     }
                 } catch (error) {
-                    console.error('Error saving data:', error);
-                    alert('Failed to save segmentation: ' + error.message);
-                } finally {
-                    setTimeout(() => {
-                        setIsSaving(false);
-                        setSaveProgress(0);
-                    }, 500);
+                    console.error('Error loading segmentation data:', error);
+                    setPendingSegmentationData(null);
+                    setPolygons([]);
                 }
-            };
+            } else {
+                setPendingSegmentationData(null);
+                setPolygons([]);
+            }
+        } catch (error) {
+            console.error('Error loading image data:', error);
+        }
+    };
 
-            // const handleSave = async () => {
-            //     setIsSaving(true);
-            //     setSaveProgress(0);
+    const handleAutoSave = async (updatedPolygons) => {
+        setIsSaving(true);
+        setSaveProgress(0);
+        
+        const progressInterval = setInterval(() => {
+            setSaveProgress(prev => Math.min(prev + 10, 90));
+        }, 100);
+
+        try {
+            const segmentationText = generateSegmentationTextFromPolygons(updatedPolygons);
+            const imageFileName = imageUrl.split('/').pop().replace(/\.[^/.]+$/, '');
+            
+            const segmentationIndices = updatedPolygons.map((polygon, index) => ({
+                index: index,
+                label: polygon.label,
+                points_count: polygon.points.length,
+                label_text: getDiatomLabel(polygon.label)
+            }));
+            
+            const response = await fetch('/api/save_segmentation', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    image_index: imageIndex,
+                    segmentation_data: segmentationText,
+                    image_filename: imageFileName,
+                    segmentation_indices: segmentationIndices
+                })
+            });
+            
+            const data = await response.json();
+            
+            clearInterval(progressInterval);
+            setSaveProgress(100);
+            
+            if (data.success) {
+                setShowToast(true);
+                setImageData(prev => ({
+                    ...prev,
+                    segmentation_url: data.segmentation_url,
+                    segmentation_indices_array: data.segmentation_indices_array
+                }));
+            } else {
+                throw new Error(data.error || 'Failed to save segmentation');
+            }
+        } catch (error) {
+            console.error('Error in auto-save:', error);
+            alert('Auto-save failed: ' + error.message);
+        } finally {
+            setTimeout(() => {
+                setIsSaving(false);
+                setSaveProgress(0);
+            }, 500);
+        }
+    };
+
+    const handleImageLoad = () => {
+        const canvas = canvasRef.current;
+        const container = containerRef.current;
+        const image = imageRef.current;
+        
+        if (canvas && container && image) {
+            canvas.width = container.offsetWidth;
+            canvas.height = container.offsetHeight;
+            
+            if (pendingSegmentationData) {
+                const loadedPolygons = parseSegmentationFile(
+                    pendingSegmentationData,
+                    image.naturalWidth,
+                    image.naturalHeight
+                );
+                setPolygons(loadedPolygons);
+                setPendingSegmentationData(null);
+            }
+            
+            drawPolygons();
+        }
+    };
+
+    const drawPolygons = () => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw completed polygons
+        polygons.forEach((polygon, index) => {
+            if (polygon.points.length < 3) return;
+
+            ctx.beginPath();
+            ctx.moveTo(polygon.points[0].x, polygon.points[0].y);
+            for (let i = 1; i < polygon.points.length; i++) {
+                ctx.lineTo(polygon.points[i].x, polygon.points[i].y);
+            }
+            ctx.closePath();
+            
+            const isSelected = index === selectedSegmentIndex;
+            
+            if (isSelected) {
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 4;
+                ctx.stroke();
                 
-            //     const progressInterval = setInterval(() => {
-            //         setSaveProgress(prev => Math.min(prev + 10, 90));
-            //     }, 100);
+                ctx.strokeStyle = polygon.color;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                ctx.fillStyle = `${polygon.color}80`;
+            } else {
+                ctx.strokeStyle = polygon.color;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                ctx.fillStyle = `${polygon.color}40`;
+            }
+            ctx.fill();
+            
+            if (isSelected) {
+                const centerX = polygon.points.reduce((sum, p) => sum + p.x, 0) / polygon.points.length;
+                const centerY = polygon.points.reduce((sum, p) => sum + p.y, 0) / polygon.points.length;
+                
+                ctx.font = '14px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = '#ffffff';
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = 3;
+                
+                const text = `${index + 1}. ${getDiatomLabel(polygon.label)}`;
+                ctx.strokeText(text, centerX, centerY);
+                ctx.fillText(text, centerX, centerY);
+            }
+        });
 
-            //     try {
-            //         const segmentationText = generateSegmentationText();
-            //         const imageFileName = imageUrl.split('/').pop().replace(/\.[^/.]+$/, '');
-                    
-            //         const response = await fetch('/api/save_segmentation', {
-            //             method: 'POST',
-            //             headers: {
-            //                 'Content-Type': 'application/json',
-            //             },
-            //             body: JSON.stringify({
-            //                 image_index: imageIndex,
-            //                 segmentation_data: segmentationText,
-            //                 image_filename: imageFileName
-            //             })
-            //         });
-                    
-            //         const data = await response.json();
-            //         console.log('Save response:', data);
-                    
-            //         clearInterval(progressInterval);
-            //         setSaveProgress(100);
-                    
-            //         if (data.success) {
-            //             setShowToast(true);
-            //             setImageData(prev => ({
-            //                 ...prev,
-            //                 segmentation_url: data.segmentation_url
-            //             }));
-            //         } else {
-            //             throw new Error(data.error || 'Failed to save segmentation');
-            //         }
-            //     } catch (error) {
-            //         console.error('Error saving data:', error);
-            //         alert('Failed to save segmentation: ' + error.message);
-            //     } finally {
-            //         setTimeout(() => {
-            //             setIsSaving(false);
-            //             setSaveProgress(0);
-            //         }, 500);
-            //     }
-            // };
+        // Draw current polygon
+        if (currentPolygon.length > 0) {
+            ctx.beginPath();
+            ctx.moveTo(currentPolygon[0].x, currentPolygon[0].y);
+            for (let i = 1; i < currentPolygon.length; i++) {
+                ctx.lineTo(currentPolygon[i].x, currentPolygon[i].y);
+            }
+            if (isDrawing) {
+                ctx.lineTo(currentPolygon[currentPolygon.length - 1].x, currentPolygon[currentPolygon.length - 1].y);
 
+            }
+            
+            ctx.strokeStyle = '#2ecc71';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+    };
 
+    const handleCanvasClick = async (e) => {
+        const rect = canvasRef.current.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
 
-            const handlePrevious = () => {
-                setImageIndex(prev => Math.max(0, prev - 1));
-            };
+        if (!isDrawing) {
+            setIsDrawing(true);
+            setCurrentPolygon([{ x, y }]);
+        } else {
+            const startPoint = currentPolygon[0];
+            const distance = Math.sqrt(
+                Math.pow(x - startPoint.x, 2) + Math.pow(y - startPoint.y, 2)
+            );
 
-            const handleNext = () => {
-                setImageIndex(prev => Math.min(totalImages - 1, prev + 1));
-            };
-
-            const handleCanvasClick = (e) => {
-                const rect = canvasRef.current.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const y = e.clientY - rect.top;
-
-                if (!isDrawing) {
-                    setIsDrawing(true);
-                    setCurrentPolygon([{ x, y }]);
-                } else {
-                    const startPoint = currentPolygon[0];
-                    const distance = Math.sqrt(
-                        Math.pow(x - startPoint.x, 2) + Math.pow(y - startPoint.y, 2)
-                    );
-
-                    if (distance < 20 && currentPolygon.length > 2) {
-                        setPolygons([...polygons, {
-                            label: selectedType,
-                            points: currentPolygon,
-                            color: getRandomColor()
-                        }]);
-                        setCurrentPolygon([]);
-                        setIsDrawing(false);
-                    } else {
-                        setCurrentPolygon([...currentPolygon, { x, y }]);
-                    }
-                }
-            };
-
-            const handleMouseMove = (e) => {
-                if (!isDrawing) return;
-                drawPolygons();
-            };
-
-            const handleKeyPress = (e) => {
-                if (e.key === 'Escape' && isDrawing) {
-                    setCurrentPolygon([]);
-                    setIsDrawing(false);
-                    drawPolygons();
-                }
-            };
-
-            const handleSelectSegment = (index) => {
-                setSelectedSegmentIndex(index === selectedSegmentIndex ? null : index);
-            };
-
-            React.useEffect(() => {
-                document.addEventListener('keydown', handleKeyPress);
-                return () => {
-                    document.removeEventListener('keydown', handleKeyPress);
+            if (distance < 20 && currentPolygon.length > 2) {
+                const newPolygon = {
+                    label: selectedType,
+                    points: currentPolygon,
+                    color: getRandomColor()
                 };
-            }, [isDrawing]);
+                
+                const updatedPolygons = [...polygons, newPolygon];
+                setPolygons(updatedPolygons);
+                setCurrentPolygon([]);
+                setIsDrawing(false);
+                
+                // Automatically trigger save after polygon completion
+                await handleAutoSave(updatedPolygons);
+            } else {
+                setCurrentPolygon([...currentPolygon, { x, y }]);
+            }
+        }
+    };
 
-            React.useEffect(() => {
-                loadImageData(imageIndex);
-            }, [imageIndex]);
+    const handleSave = () => handleAutoSave(polygons);
 
-            React.useEffect(() => {
-                if (pendingSegmentationData && imageRef.current) {
-                    handleImageLoad();
-                }
-            }, [pendingSegmentationData]);
+    const handlePrevious = () => {
+        setImageIndex(prev => Math.max(0, prev - 1));
+    };
 
-            React.useEffect(() => {
-                drawPolygons();
-            }, [polygons, currentPolygon, selectedSegmentIndex]);
+    const handleNext = () => {
+        setImageIndex(prev => Math.min(totalImages - 1, prev + 1));
+    };
 
-            // Added
-            React.useEffect(() => {
-                const image = imageRef.current;
-                if (image && image.complete && pendingSegmentationData) {
-                    console.log('Image already loaded, processing segmentation data');
-                    handleImageLoad();
-                }
-            }, [imageUrl, pendingSegmentationData]);
+    const handleMouseMove = (e) => {
+        if (!isDrawing) return;
+        drawPolygons();
+    };
 
+    const handleKeyPress = (e) => {
+        if (e.key === 'Escape' && isDrawing) {
+            setCurrentPolygon([]);
+            setIsDrawing(false);
+            drawPolygons();
+        }
+    };
 
+    const handleSelectSegment = (index) => {
+        setSelectedSegmentIndex(index === selectedSegmentIndex ? null : index);
+    };
 
-            return (
-                <div className="flex h-screen bg-gray-200">
-                    <div className="w-64 bg-gray-800 fixed h-full">
-                        <img 
-                            src="/static/diatomhub-images/logo/diatom_hub_5e.svg" 
-                            alt="DiatomHub Logo" 
-                            className="w-4/5 mx-auto mt-5"
+    React.useEffect(() => {
+        document.addEventListener('keydown', handleKeyPress);
+        return () => {
+            document.removeEventListener('keydown', handleKeyPress);
+        };
+    }, [isDrawing]);
+
+    React.useEffect(() => {
+        loadImageData(imageIndex);
+    }, [imageIndex]);
+
+    React.useEffect(() => {
+        if (pendingSegmentationData && imageRef.current) {
+            handleImageLoad();
+        }
+    }, [pendingSegmentationData]);
+
+    React.useEffect(() => {
+        drawPolygons();
+    }, [polygons, currentPolygon, selectedSegmentIndex]);
+
+    React.useEffect(() => {
+        const image = imageRef.current;
+        if (image && image.complete && pendingSegmentationData) {
+            handleImageLoad();
+        }
+    }, [imageUrl, pendingSegmentationData]);
+
+    return (
+        <div className="flex h-screen bg-gray-200">
+            <div className="w-64 bg-gray-800 fixed h-full">
+                <img 
+                    src="/static/diatomhub-images/logo/diatom_hub_5e.svg" 
+                    alt="DiatomHub Logo" 
+                    className="w-4/5 mx-auto mt-5"
+                />
+            </div>
+
+            <div className="flex-1 ml-64 mr-96">
+                <div className="flex flex-col items-center justify-center min-h-screen p-5">
+                    <div className="text-4xl font-bold mb-4 text-gray-800">
+                        Diatom Segmentation
+                    </div>
+                    
+                    <DiatomeSelector 
+                        selected={selectedType}
+                        setSelected={setSelectedType}
+                    />
+                    
+                    <div 
+                        ref={containerRef}
+                        className="relative w-full max-w-4xl mt-4"
+                    >
+                        <img
+                            ref={imageRef}
+                            src={imageUrl}
+                            alt="Diatom"
+                            className="w-full"
+                            onLoad={handleImageLoad}
+                        />
+                        <canvas
+                            ref={canvasRef}
+                            className="absolute top-0 left-0 w-full h-full cursor-crosshair"
+                            onClick={handleCanvasClick}
+                            onMouseMove={handleMouseMove}
                         />
                     </div>
-
-                    <div className="flex-1 ml-64 mr-96">
-                        <div className="flex flex-col items-center justify-center min-h-screen p-5">
-                            <div className="text-4xl font-bold mb-4 text-gray-800">
-                                Diatom Segmentation
-                            </div>
-                            
-                            <DiatomeSelector 
-                                selected={selectedType}
-                                setSelected={setSelectedType}
-                            />
-                            
-                            <div 
-                                ref={containerRef}
-                                className="relative w-full max-w-4xl mt-4"
-                            >
-                                <img
-                                    ref={imageRef}
-                                    src={imageUrl}
-                                    alt="Diatom"
-                                    className="w-full"
-                                    onLoad={handleImageLoad}
-                                />
-                                <canvas
-                                    ref={canvasRef}
-                                    className="absolute top-0 left-0 w-full h-full cursor-crosshair"
-                                    onClick={handleCanvasClick}
-                                    onMouseMove={handleMouseMove}
-                                />
-                            </div>
-                            
-                            <div className="flex justify-center space-x-4 mt-6">
-                                <button 
-                                    onClick={handlePrevious}
-                                    disabled={imageIndex === 0}
-                                    className="bg-yellow-400 text-black px-8 py-3 rounded-lg font-bold disabled:opacity-50 transform transition-all duration-200 hover:scale-105 hover:bg-yellow-300 hover:shadow-lg disabled:hover:scale-100 disabled:hover:bg-yellow-400 disabled:hover:shadow-none"
-                                >
-                                    Previous
-                                </button>
-                                <button 
-                                    onClick={handleSave}
-                                    disabled={isSaving}
-                                    className="bg-green-600 text-white px-12 py-3 rounded-lg font-bold transform transition-all duration-200 hover:scale-105 hover:bg-green-500 hover:shadow-lg flex items-center justify-center space-x-2 min-w-[120px]"
-                                >
-                                    {isSaving ? (
-                                        <CircularProgress progress={saveProgress} />
-                                    ) : (
-                                        <span>Save</span>
-                                    )}
-                                </button>
-                                <button 
-                                    onClick={() => window.location.href = '/api/download_segmentation'}
-                                    className="bg-blue-600 text-white px-12 py-3 rounded-lg font-bold transform transition-all duration-200 hover:scale-105 hover:bg-blue-500 hover:shadow-lg"
-                                >
-                                    Download
-                                </button>
-                                <button 
-                                    onClick={handleNext}
-                                    disabled={imageIndex === totalImages - 1}
-                                    className="bg-yellow-400 text-black px-8 py-3 rounded-lg font-bold disabled:opacity-50 transform transition-all duration-200 hover:scale-105 hover:bg-yellow-300 hover:shadow-lg disabled:hover:scale-100 disabled:hover:bg-yellow-400 disabled:hover:shadow-none"
-                                >
-                                    Next
-                                </button>
-                            </div>
-
-                            {imageData?.segmentation_url && (
-                                <div className="mt-4 max-w-4xl w-full">
-                                    <div className="bg-gray-100 p-4 rounded-lg">
-                                        <p className="text-sm text-gray-600 font-semibold mb-1">Segmentation File URL:</p>
-                                        <a 
-                                            href={imageData.segmentation_url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="text-blue-600 hover:text-blue-800 break-all font-mono text-sm"
-                                        >
-                                            {imageData.segmentation_url}
-                                        </a>
-                                    </div>
-                                </div>
+                    
+                    <div className="flex justify-center space-x-4 mt-6">
+                        <button 
+                            onClick={handlePrevious}
+                            disabled={imageIndex === 0}
+                            className="bg-yellow-400 text-black px-8 py-3 rounded-lg font-bold disabled:opacity-50 transform transition-all duration-200 hover:scale-105 hover:bg-yellow-300 hover:shadow-lg disabled:hover:scale-100 disabled:hover:bg-yellow-400 disabled:hover:shadow-none"
+                        >
+                            Previous
+                        </button>
+                        <button 
+                            onClick={handleSave}
+                            disabled={isSaving}
+                            className="bg-green-600 text-white px-12 py-3 rounded-lg font-bold transform transition-all duration-200 hover:scale-105 hover:bg-green-500 hover:shadow-lg flex items-center justify-center space-x-2 min-w-[120px]"
+                        >
+                            {isSaving ? (
+                                <CircularProgress progress={saveProgress} />
+                            ) : (
+                                <span>Save</span>
                             )}
-                        </div>
+                        </button>
+                        <button 
+                            onClick={() => window.location.href = '/api/download_segmentation'}
+                            className="bg-blue-600 text-white px-12 py-3 rounded-lg font-bold transform transition-all duration-200 hover:scale-105 hover:bg-blue-500 hover:shadow-lg"
+                        >
+                            Download
+                        </button>
+                        <button 
+                            onClick={handleNext}
+                            disabled={imageIndex === totalImages - 1}
+                            className="bg-yellow-400 text-black px-8 py-3 rounded-lg font-bold disabled:opacity-50 transform transition-all duration-200 hover:scale-105 hover:bg-yellow-300 hover:shadow-lg disabled:hover:scale-100 disabled:hover:bg-yellow-400 disabled:hover:shadow-none"
+                        >
+                            Next
+                        </button>
                     </div>
 
-                    <div className="w-96 bg-gray-800 fixed right-0 h-full overflow-y-auto">
-                        <div className="text-2xl font-bold text-white text-center py-5 border-b border-gray-700">
-                            Polygons ({polygons.length})
+                    {imageData?.segmentation_url && (
+                        <div className="mt-4 max-w-4xl w-full">
+                            <div className="bg-gray-100 p-4 rounded-lg">
+                                <p className="text-sm text-gray-600 font-semibold mb-1">Segmentation File URL:</p>
+                                <a 
+                                    href={imageData.segmentation_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 hover:text-blue-800 break-all font-mono text-sm"
+                                >
+                                    {imageData.segmentation_url}
+                                </a>
+                            </div>
                         </div>
-                        <div className="p-4 text-white">
-                            <p>Instructions:</p>
-                            <ul className="list-disc pl-5 space-y-2 mt-2">
-                                <li>Click to start drawing a polygon</li>
-                                <li>Click to add points to the polygon</li>
-                                <li>Click near the start point to close the polygon</li>
-                                <li>Press ESC to cancel current polygon</li>
-                                <li>Click on a segmentation in the list to highlight it</li>
-                            </ul>
-                        </div>
-                        
-                        <SegmentationList 
-                            polygons={polygons}
-                            selectedIndex={selectedSegmentIndex}
-                            onSelectSegment={handleSelectSegment}
-                            getDiatomLabel={getDiatomLabel}
-                        />
-                    </div>
-
-                    {showToast && (
-                        <Toast 
-                            message="Segmentation saved successfully!" 
-                            onClose={() => setShowToast(false)} 
-                        />
                     )}
                 </div>
-            );
-        }
+            </div>
 
+            <div className="w-96 bg-gray-800 fixed right-0 h-full overflow-y-auto">
+                <div className="text-2xl font-bold text-white text-center py-5 border-b border-gray-700">
+                    Polygons ({polygons.length})
+                </div>
+                <div className="p-4 text-white">
+                    <p>Instructions:</p>
+                    <ul className="list-disc pl-5 space-y-2 mt-2">
+                        <li>Click to start drawing a polygon</li>
+                        <li>Click to add points to the polygon</li>
+                        <li>Click near the start point to close the polygon</li>
+                        <li>Press ESC to cancel current polygon</li>
+                        <li>Click on a segmentation in the list to highlight it</li>
+                    </ul>
+                </div>
+                
+                <SegmentationList 
+                    polygons={polygons}
+                    selectedIndex={selectedSegmentIndex}
+                    onSelectSegment={handleSelectSegment}
+                    getDiatomLabel={getDiatomLabel}
+                />
+            </div>
+
+            {showToast && (
+                <Toast 
+                    message="Segmentation saved successfully!" 
+                    onClose={() => setShowToast(false)} 
+                />
+            )}
+        </div>
+    );
+}
+
+export default DiatomSegmenter;
+
+// Main DiatomSegmenter Component Ends Here
         // Add styles
         const style = document.createElement('style');
         style.textContent = `
