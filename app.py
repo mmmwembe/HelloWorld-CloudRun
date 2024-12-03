@@ -183,8 +183,9 @@ def process_pdfs(pdf_urls):
     
     processing_status['complete'] = True
     # Save paper jons to GCP
-    PAPER_JSON_FILES.extend(TEMP_JSON_FILES)
+    
     PAPER_JSON_FILES = gcp_ops.load_paper_json_files(papers_json_public_url)
+    PAPER_JSON_FILES.extend(TEMP_JSON_FILES)
     papers_json_public_url = gcp_ops.save_paper_json_files(papers_json_public_url, PAPER_JSON_FILES)
 
 def save_labels(updated_data):
