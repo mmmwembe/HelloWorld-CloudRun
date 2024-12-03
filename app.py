@@ -1,4 +1,5 @@
-from flask import Flask, render_template, send_file, request, jsonify, redirect, url_for, flash, send_from_directory
+from flask import Flask, render_template, send_file, request, jsonify, redirect, url_for, flash, send_from_directory, Response
+from werkzeug.utils import secure_filename
 import os
 from datetime import datetime
 import time
@@ -21,6 +22,9 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
+app.config['SECURITY_PASSWORD_SALT'] = 'thisistheSALTforcreatingtheCONFIRMATIONtoken'
+app.config['MAX_CONTENT_LENGTH'] = 64 * 1024 * 1024  # Increased to 64MB for multiple files
+app.config['UPLOAD_FOLDER'] = 'temp_uploads'
 
 # Constants
 SESSION_ID = 'eb9db0ca54e94dbc82cffdab497cde13'
@@ -37,6 +41,11 @@ PAPERS_JSON_PUBLIC_URL = f"https://storage.googleapis.com/{PAPERS_BUCKET_JSON_FI
 PAPER_JSON_FILES = []
 DIATOMS_DATA = []
 data_lock = Lock()
+
+# 
+ALLOWED_EXTENSIONS = {'pdf'}
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 # Create an instance of GCPOps
 gcp_ops = GCPOps()
@@ -712,7 +721,92 @@ def download_segmentation():
 def display_json():
     return render_template('displayjson.html')
 
+#--------------------------UPLOAD PDF FILES---------------------------------------------------------------------
+@app.route('/view_pdf/<path:blob_name>')
+def view_pdf(blob_name):
+    try:
+        # Download the PDF content
+        content = gcp_ops.get_blob_content(PAPERS_BUCKET, SESSION_ID, blob_name)
+        
+        # Return the PDF in an inline content disposition
+        return Response(
+            content,
+            mimetype='application/pdf',
+            headers={
+                'Content-Disposition': 'inline; filename=' + blob_name.split('/')[-1]
+            }
+        )
+    except Exception as e:
+        flash(f'Error viewing PDF: {str(e)}')
+        return redirect(url_for('upload_file'))
 
+@app.route('/preview_pdf/<path:blob_name>')
+def preview_pdf(blob_name):
+    """Render a page to preview the PDF"""
+    return render_template('pdf_viewer.html', pdf_url=url_for('view_pdf', blob_name=blob_name))
+
+@app.route('/upload_pdfs', methods=['GET', 'POST'])
+def upload_file():
+    if request.method == 'POST':
+        # check if any file was uploaded
+        if 'files[]' not in request.files:
+            flash('No files selected')
+            return redirect(request.url)
+        
+        files = request.files.getlist('files[]')
+        
+        if not files or all(file.filename == '' for file in files):
+            flash('No files selected')
+            return redirect(request.url)
+        
+        upload_count = 0
+        error_count = 0
+        
+        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+        
+        for file in files:
+            if file and allowed_file(file.filename):
+                filename = secure_filename(file.filename)
+                TMP_DIR = os.path.join(app.config['UPLOAD_FOLDER'], SESSION_ID)
+                os.makedirs(TMP_DIR)
+                temp_path = os.path.join(TMP_DIR,filename)
+                
+                try:
+                    file.save(temp_path)
+
+                    blob_name,public_url = gcp_ops.save_pdf_file_to_bucket(temp_path, PAPERS_BUCKET, SESSION_ID)
+                    #file_public_url = save_file_to_bucket(temp_path, SESSION_ID, FILE_HASH_NUM, BUCKET_NAME, subdir="papers")
+                    
+                    # Update PARENT_FILES_PD
+                    #update_uploaded_files_tracking(public_url)
+                    
+                    os.remove(temp_path)
+                    
+                    if blob_name:
+                        upload_count += 1
+                    else:
+                        error_count += 1
+                except Exception as e:
+                    print(f"Error processing file {filename}: {e}")
+                    error_count += 1
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+            else:
+                error_count += 1
+        
+        if upload_count > 0:
+            flash(f'Successfully uploaded {upload_count} file(s)')
+        if error_count > 0:
+            flash(f'Failed to upload {error_count} file(s)')
+        
+        return redirect(url_for('upload_file'))
+
+    files = gcp_ops.get_uploaded_files(PAPERS_BUCKET,SESSION_ID)
+    #files = get_public_urls2(BUCKET_NAME, SESSION_ID, FILE_HASH_NUM)
+    return render_template('upload_images.html', files=files)
+
+
+#---------------------------------------------------------------------------------------------
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))

@@ -495,3 +495,48 @@ class GCPOps:
         except Exception as e:
             logger.error(f"Error getting segmentation data: {str(e)}")
             return None
+
+    def get_uploaded_files(self, bucket_name, session_id):
+        try:
+            bucket = self.storage_client.get_bucket(bucket_name)
+            prefix = f"pdf/{session_id}/"
+            blobs = bucket.list_blobs(prefix=prefix)
+            
+            files = []
+            for blob in blobs:
+                file_info = {
+                    'name': blob.name.split('/')[-1],
+                    'blob_name': blob.name, 
+                    'size': f"{blob.size / 1024 / 1024:.2f} MB",
+                    'updated': blob.updated.strftime('%Y-%m-%d %H:%M:%S'),
+                    'public_url': f"https://storage.googleapis.com/{bucket_name}/{blob.name}"
+                }
+                files.append(file_info)
+            
+            return sorted(files, key=lambda x: x['updated'], reverse=True)
+        except Exception as e:
+            print(f"Error listing files: {e}")
+            return []
+        
+    def get_blob_content(self, bucket_name, blob_name):
+        try:
+            bucket = self.storage_client.get_bucket(bucket_name)
+            blob = bucket.blob(blob_name)
+            return blob.download_as_bytes()
+        except Exception as e:
+            print(f"Error downloading blob: {e}")
+            return None
+
+
+    def save_pdf_file_to_bucket(self, local_file_path, bucket_name, session_id):
+        try:
+            filename = os.path.basename(local_file_path)
+            bucket = self.storage_client.get_bucket(bucket_name)
+            blob_name = f"pdf/{session_id}/{filename}"
+            blob = bucket.blob(blob_name)
+            blob.upload_from_filename(local_file_path)
+            public_url = f"https://storage.googleapis.com/{bucket_name}/{blob_name}"
+            return blob_name, public_url
+        except Exception as e:
+            print(f"Error uploading file: {e}") 
+            return None
