@@ -151,7 +151,8 @@ def process_pdfs(pdf_urls):
             
             # Update PAPER_JSON_FILES and save
             PAPER_JSON_FILES.append(pdf_paper_json)
-                  
+            papers_json_public_url = gcp_ops.save_paper_json_files(papers_json_public_url, PAPER_JSON_FILES)
+            
             # Update processing status
             processing_status.update({
                 'full_text': full_text,
@@ -180,8 +181,6 @@ def process_pdfs(pdf_urls):
         time.sleep(15)
     
     processing_status['complete'] = True
-    # Save paper jons to GCP
-    papers_json_public_url = gcp_ops.save_paper_json_files(papers_json_public_url, PAPER_JSON_FILES)
 
 def save_labels(updated_data):
     """Save updated labels and synchronize all data structures"""
@@ -473,7 +472,29 @@ def download_labels():
         return jsonify({'error': str(e)}), 500
     
 #-----------------------------------------SEGMENTATION--------------------------------------------------------------------
- 
+
+# Add these routes to app.py
+
+# @app.route('/segmentation')
+# def segmentation():
+#     """Route for the segmentation labeling interface"""
+#     global DIATOMS_DATA
+    
+#     try:
+#         if not DIATOMS_DATA:
+#             try:
+#                 DIATOMS_DATA = ClaudeAI.get_DIATOMS_DATA(PAPERS_JSON_PUBLIC_URL)
+#             except Exception as e:
+#                 app.logger.error(f"Error loading diatoms data: {str(e)}")
+#                 return render_template('error.html', error="No diatom data available"), 404
+        
+#         app.logger.info(f"Segmentation route: Found {len(DIATOMS_DATA)} diatom entries")
+#         return render_template('label-segmentation.html')
+        
+#     except Exception as e:
+#         app.logger.error(f"Error in segmentation route: {str(e)}")
+#         return render_template('error.html', error=str(e)), 500
+    
 @app.route('/segmentation')
 def segmentation():
     """Route for the segmentation labeling interface"""
@@ -566,6 +587,32 @@ def save_segmentation():
             'error': str(e)
         }), 500
 
+# @app.route('/api/get_segmentation')
+# def get_segmentation():
+#     """Proxy route to fetch segmentation data from GCS"""
+#     try:
+#         url = request.args.get('url')
+#         if not url:
+#             raise ValueError("No URL provided")
+            
+#         logger.info(f"Attempting to load segmentation data from: {url}")
+        
+#         # Use the existing load_segmentation_data method
+#         content = gcp_ops.load_segmentation_data(url)
+        
+#         if content is None:
+#             logger.error(f"No segmentation data found at {url}")
+#             return jsonify({'error': 'Segmentation file not found'}), 404
+            
+#         logger.info(f"Successfully loaded segmentation data: {len(content)} characters")
+#         return content, 200, {'Content-Type': 'text/plain'}
+        
+#     except Exception as e:
+#         logger.error(f"Error in get_segmentation: {str(e)}")
+#         return jsonify({
+#             'error': f"Failed to fetch segmentation data: {str(e)}"
+#         }), 500
+
 @app.route('/api/get_segmentation')
 def get_segmentation():
     """Proxy route to fetch segmentation annotations and indices from GCS"""
@@ -604,6 +651,73 @@ def get_segmentation():
             'error': f"Failed to fetch segmentation annotations: {str(e)}"
         }), 500
         
+# @app.route('/api/save_segmentation', methods=['POST'])
+# def save_segmentation():
+#     """Save segmentation data to GCS bucket and update DIATOMS_DATA"""
+#     try:
+#         data = request.json
+#         image_index = data.get('image_index', 0)
+#         segmentation_data = data.get('segmentation_data', '')
+#         image_filename = data.get('image_filename', '')
+        
+#         logger.info(f"Saving segmentation for image {image_filename}")
+#         logger.debug(f"Segmentation data: {segmentation_data}")
+        
+#         if not segmentation_data or not image_filename:
+#             raise ValueError("Missing required data")
+            
+#         # Save segmentation data to GCS bucket
+#         segmentation_url = gcp_ops.save_segmentation_data(
+#             segmentation_data=segmentation_data,
+#             image_filename=image_filename,
+#             session_id=SESSION_ID,
+#             bucket_name=BUCKET_SEGMENTATION_LABELS
+#         )
+        
+#         if not segmentation_url:
+#             raise Exception("Failed to save segmentation data to GCS")
+        
+#         logger.info(f"Saved segmentation to URL: {segmentation_url}")
+            
+#         # Update DIATOMS_DATA with the segmentation URL
+#         if 0 <= image_index < len(DIATOMS_DATA):
+#             DIATOMS_DATA[image_index]['segmentation_url'] = segmentation_url
+            
+#             # Update corresponding entry in PAPER_JSON_FILES
+#             for paper in PAPER_JSON_FILES:
+#                 if 'diatoms_data' in paper:
+#                     if isinstance(paper['diatoms_data'], str):
+#                         paper['diatoms_data'] = json.loads(paper['diatoms_data'])
+                    
+#                     if paper['diatoms_data'].get('image_url') == DIATOMS_DATA[image_index].get('image_url'):
+#                         paper['diatoms_data']['segmentation_url'] = segmentation_url
+#                         break
+            
+#             # Save updated data to GCS
+#             success = ClaudeAI.update_and_save_papers(
+#                 PAPERS_JSON_PUBLIC_URL,
+#                 PAPER_JSON_FILES,
+#                 DIATOMS_DATA
+#             )
+            
+#             if not success:
+#                 raise Exception("Failed to update papers data in GCS")
+                
+#             return jsonify({
+#                 'success': True,
+#                 'message': 'Segmentation saved successfully',
+#                 'segmentation_url': segmentation_url
+#             })
+#         else:
+#             raise ValueError(f"Invalid image index: {image_index}")
+            
+#     except Exception as e:
+#         logger.error(f"Error saving segmentation: {str(e)}")
+#         return jsonify({
+#             'success': False,
+#             'error': str(e)
+#         }), 500
+
 @app.route('/api/download_segmentation')
 def download_segmentation():
     """Download all segmentation data for current session"""
