@@ -10,6 +10,7 @@ from modules import ClaudeAI
 from modules import GCPOps
 from modules import PDFOps
 import logging
+import pandas as pd
 
 # Configure logging
 logging.basicConfig(
@@ -110,34 +111,31 @@ processing_status = {
 }
 
 def process_pdfs(pdf_urls):
-    """Background task to process PDFs"""
     global processing_status, PAPER_JSON_FILES
-    
-    TEMP_JSON_FILES =[]
+    TEMP_JSON_FILES = []
+
+    # Construct the papers JSON public URL
+    with data_lock:
+        PAPER_JSON_FILES = gcp_ops.load_paper_json_files(PAPERS_JSON_PUBLIC_URL) or []
+
     for i, url in enumerate(pdf_urls, 1):
-        processing_status['current_index'] = i
-        processing_status['current_url'] = url
-        
+        with data_lock:
+            processing_status['current_index'] = i
+            processing_status['current_url'] = url
+
         try:
             pdf_ops = PDFOps()
             claude = ClaudeAI()
-            
-            papers_json_public_url = f"https://storage.googleapis.com/{PAPERS_BUCKET_JSON_FILES}/jsons_from_pdfs/{SESSION_ID}/{SESSION_ID}.json"
-    
-            # Load existing PAPER_JSON_FILES
-            
-            
+
             # Extract text and images
             full_text, first_two_pages_text, filename = pdf_ops.extract_text_from_pdf(url)
             extracted_images_file_metadata = pdf_ops.extract_images_and_metadata(url, SESSION_ID, BUCKET_EXTRACTED_IMAGES)
-            
-            # Process paper
+
+            # Process the paper
             paper_info, diatoms_data, paper_image_urls = claude.process_paper(full_text, extracted_images_file_metadata)
-            
-            # Get citation info
             citation_info = claude.extract_citation(first_two_pages_text=first_two_pages_text, method="default_citation")
-            
-            # Create paper JSON
+
+            # Create JSON for the paper
             pdf_paper_json = {
                 "pdf_file_url": safe_value(url),
                 "filename": safe_value(filename),
@@ -145,48 +143,115 @@ def process_pdfs(pdf_urls):
                 "pdf_text_content": safe_value(full_text),
                 "first_two_pages_text": safe_value(first_two_pages_text),
                 "paper_info": safe_value(paper_info),
-                "papers_json_public_url": safe_value(papers_json_public_url),
+                "papers_json_public_url": safe_value(PAPERS_JSON_PUBLIC_URL),
                 "diatoms_data": safe_value(diatoms_data),
-                "citation": safe_value(citation_info)
+                "citation": safe_value(citation_info),
             }
-            
-            # Update PAPER_JSON_FILES and save
-            # PAPER_JSON_FILES.append(pdf_paper_json)
             TEMP_JSON_FILES.append(pdf_paper_json)
-                  
-            # Update processing status
-            processing_status.update({
-                'full_text': full_text,
-                'first_two_pages_text': first_two_pages_text,
-                'filename': filename,
-                'citation_info': json.dumps(citation_info, indent=2),
-                'extracted_images_file_metadata': json.dumps(extracted_images_file_metadata, indent=2),
-                'pdf_paper_json': json.dumps(pdf_paper_json, indent=2),
-                'paper_info': json.dumps(paper_info, indent=2),
-                'diatoms_data': json.dumps(diatoms_data, indent=2)
-            })
-            
+
+            with data_lock:
+                processing_status.update({
+                    'full_text': full_text,
+                    'first_two_pages_text': first_two_pages_text,
+                    'filename': filename,
+                    'citation_info': json.dumps(citation_info, indent=2),
+                    'extracted_images_file_metadata': json.dumps(extracted_images_file_metadata, indent=2),
+                    'pdf_paper_json': json.dumps(pdf_paper_json, indent=2),
+                    'paper_info': json.dumps(paper_info, indent=2),
+                    'diatoms_data': json.dumps(diatoms_data, indent=2),
+                })
         except Exception as e:
-            app.logger.error(f"Error processing PDF: {str(e)}")
-            processing_status.update({
-                'full_text': 'Error extracting text',
-                'first_two_pages_text': 'Error extracting text',
-                'filename': 'Error extracting filename',
-                'citation_info': 'Error extracting citation',
-                'extracted_images_file_metadata': 'Error extracting images and file metadata',
-                'pdf_paper_json': 'Error generating pdf_paper_json',
-                'paper_info': 'Error generating paper_info',
-                'diatoms_data': 'Error generating diatoms_data'
-            })
+            app.logger.error(f"Error processing PDF at {url}: {str(e)}")
+        
+        time.sleep(15)  # Simulate processing delay
+
+    # Append TEMP_JSON_FILES to PAPER_JSON_FILES and save
+    with data_lock:
+        PAPER_JSON_FILES.extend(TEMP_JSON_FILES)
+        gcp_ops.save_paper_json_files(PAPERS_JSON_PUBLIC_URL, PAPER_JSON_FILES)
+
+    with data_lock:
+        processing_status['complete'] = True
+
+
+# def process_pdfs(pdf_urls):
+#     """Background task to process PDFs"""
+#     global processing_status, PAPER_JSON_FILES
+    
+#     TEMP_JSON_FILES =[]
+#     for i, url in enumerate(pdf_urls, 1):
+#         processing_status['current_index'] = i
+#         processing_status['current_url'] = url
+        
+#         try:
+#             pdf_ops = PDFOps()
+#             claude = ClaudeAI()
             
-        time.sleep(15)
+#             papers_json_public_url = f"https://storage.googleapis.com/{PAPERS_BUCKET_JSON_FILES}/jsons_from_pdfs/{SESSION_ID}/{SESSION_ID}.json"
     
-    processing_status['complete'] = True
-    # Save paper jons to GCP
+#             # Load existing PAPER_JSON_FILES
+            
+            
+#             # Extract text and images
+#             full_text, first_two_pages_text, filename = pdf_ops.extract_text_from_pdf(url)
+#             extracted_images_file_metadata = pdf_ops.extract_images_and_metadata(url, SESSION_ID, BUCKET_EXTRACTED_IMAGES)
+            
+#             # Process paper
+#             paper_info, diatoms_data, paper_image_urls = claude.process_paper(full_text, extracted_images_file_metadata)
+            
+#             # Get citation info
+#             citation_info = claude.extract_citation(first_two_pages_text=first_two_pages_text, method="default_citation")
+            
+#             # Create paper JSON
+#             pdf_paper_json = {
+#                 "pdf_file_url": safe_value(url),
+#                 "filename": safe_value(filename),
+#                 "extracted_images_file_metadata": safe_value(extracted_images_file_metadata),
+#                 "pdf_text_content": safe_value(full_text),
+#                 "first_two_pages_text": safe_value(first_two_pages_text),
+#                 "paper_info": safe_value(paper_info),
+#                 "papers_json_public_url": safe_value(papers_json_public_url),
+#                 "diatoms_data": safe_value(diatoms_data),
+#                 "citation": safe_value(citation_info)
+#             }
+            
+#             # Update PAPER_JSON_FILES and save
+#             # PAPER_JSON_FILES.append(pdf_paper_json)
+#             TEMP_JSON_FILES.append(pdf_paper_json)
+                  
+#             # Update processing status
+#             processing_status.update({
+#                 'full_text': full_text,
+#                 'first_two_pages_text': first_two_pages_text,
+#                 'filename': filename,
+#                 'citation_info': json.dumps(citation_info, indent=2),
+#                 'extracted_images_file_metadata': json.dumps(extracted_images_file_metadata, indent=2),
+#                 'pdf_paper_json': json.dumps(pdf_paper_json, indent=2),
+#                 'paper_info': json.dumps(paper_info, indent=2),
+#                 'diatoms_data': json.dumps(diatoms_data, indent=2)
+#             })
+            
+#         except Exception as e:
+#             app.logger.error(f"Error processing PDF: {str(e)}")
+#             processing_status.update({
+#                 'full_text': 'Error extracting text',
+#                 'first_two_pages_text': 'Error extracting text',
+#                 'filename': 'Error extracting filename',
+#                 'citation_info': 'Error extracting citation',
+#                 'extracted_images_file_metadata': 'Error extracting images and file metadata',
+#                 'pdf_paper_json': 'Error generating pdf_paper_json',
+#                 'paper_info': 'Error generating paper_info',
+#                 'diatoms_data': 'Error generating diatoms_data'
+#             })
+            
+#         time.sleep(15)
     
-    PAPER_JSON_FILES = gcp_ops.load_paper_json_files(papers_json_public_url)
-    PAPER_JSON_FILES.extend(TEMP_JSON_FILES)
-    papers_json_public_url = gcp_ops.save_paper_json_files(papers_json_public_url, PAPER_JSON_FILES)
+#     processing_status['complete'] = True
+#     # Save paper jons to GCP
+    
+#     PAPER_JSON_FILES = gcp_ops.load_paper_json_files(papers_json_public_url)
+#     PAPER_JSON_FILES.extend(TEMP_JSON_FILES)
+#     papers_json_public_url = gcp_ops.save_paper_json_files(papers_json_public_url, PAPER_JSON_FILES)
 
 def save_labels(updated_data):
     """Save updated labels and synchronize all data structures"""
