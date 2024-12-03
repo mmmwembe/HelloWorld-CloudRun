@@ -726,7 +726,7 @@ def display_json():
 def view_pdf(blob_name):
     try:
         # Download the PDF content
-        content = gcp_ops.get_blob_content(PAPERS_BUCKET, SESSION_ID, blob_name)
+        content = gcp_ops.get_blob_content(PAPERS_BUCKET, blob_name)
         
         # Return the PDF in an inline content disposition
         return Response(
