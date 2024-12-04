@@ -766,6 +766,82 @@ def ensure_clean_temp_dir(tmp_dir):
         print(f"Error creating temporary directory: {e}")
         raise
 
+# @app.route('/upload_pdfs', methods=['GET', 'POST'])
+# def upload_file():
+#     if request.method == 'POST':
+#         if 'files[]' not in request.files:
+#             flash('No files selected')
+#             return redirect(request.url)
+        
+#         files = request.files.getlist('files[]')
+        
+#         if not files or all(file.filename == '' for file in files):
+#             flash('No files selected')
+#             return redirect(request.url)
+        
+#         upload_count = 0
+#         error_count = 0
+        
+#         # Ensure base upload folder exists
+#         os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+        
+#         # Create a clean temporary directory for this session
+#         TMP_DIR = os.path.join(app.config['UPLOAD_FOLDER'], SESSION_ID)
+#         try:
+#             ensure_clean_temp_dir(TMP_DIR)
+#         except Exception as e:
+#             flash('Error preparing upload directory')
+#             print(f"Directory preparation error: {e}")
+#             return redirect(request.url)
+        
+#         for file in files:
+#             if file and allowed_file(file.filename):
+#                 filename = secure_filename(file.filename)
+#                 temp_path = os.path.join(TMP_DIR, filename)
+                
+#                 try:
+#                     file.save(temp_path)
+#                     blob_name, public_url = gcp_ops.save_pdf_file_to_bucket(
+#                         temp_path, 
+#                         PAPERS_BUCKET, 
+#                         SESSION_ID
+#                     )
+                    
+#                     if blob_name:
+#                         upload_count += 1
+#                     else:
+#                         error_count += 1
+                        
+#                 except Exception as e:
+#                     print(f"Error processing file {filename}: {e}")
+#                     error_count += 1
+#                 finally:
+#                     # Clean up temporary file regardless of success/failure
+#                     if os.path.exists(temp_path):
+#                         try:
+#                             os.remove(temp_path)
+#                         except Exception as e:
+#                             print(f"Error removing temporary file {temp_path}: {e}")
+#             else:
+#                 error_count += 1
+        
+#         # Clean up the temporary directory after all files are processed
+#         try:
+#             shutil.rmtree(TMP_DIR)
+#         except Exception as e:
+#             print(f"Error removing temporary directory {TMP_DIR}: {e}")
+        
+#         if upload_count > 0:
+#             flash(f'Successfully uploaded {upload_count} file(s)')
+#         if error_count > 0:
+#             flash(f'Failed to upload {error_count} file(s)')
+        
+#         return redirect(url_for('upload_file'))
+
+#     # GET request handling
+#     files = gcp_ops.get_uploaded_files(PAPERS_BUCKET, SESSION_ID)
+#     return render_template('upload_images.html', files=files)
+
 @app.route('/upload_pdfs', methods=['GET', 'POST'])
 def upload_file():
     if request.method == 'POST':
@@ -779,33 +855,37 @@ def upload_file():
             flash('No files selected')
             return redirect(request.url)
         
+        # Create upload directory if it doesn't exist
+        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+        TMP_DIR = os.path.join(app.config['UPLOAD_FOLDER'], SESSION_ID)
+        os.makedirs(TMP_DIR, exist_ok=True)
+        
         upload_count = 0
         error_count = 0
+        skipped_files = []
+        current_size = 0
+        MAX_BATCH_SIZE = 60 * 1024 * 1024  # Leave some buffer below the 64MB limit
         
-        # Ensure base upload folder exists
-        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-        
-        # Create a clean temporary directory for this session
-        TMP_DIR = os.path.join(app.config['UPLOAD_FOLDER'], SESSION_ID)
-        try:
-            ensure_clean_temp_dir(TMP_DIR)
-        except Exception as e:
-            flash('Error preparing upload directory')
-            print(f"Directory preparation error: {e}")
-            return redirect(request.url)
-        
+        # Process files while tracking total size
         for file in files:
             if file and allowed_file(file.filename):
+                # Get file size from FileStorage object
+                file.seek(0, 2)  # Seek to end
+                file_size = file.tell()
+                file.seek(0)  # Reset to beginning
+                
+                # Skip this file if it would exceed our batch size
+                if current_size + file_size > MAX_BATCH_SIZE:
+                    skipped_files.append(file.filename)
+                    continue
+                
+                current_size += file_size
                 filename = secure_filename(file.filename)
                 temp_path = os.path.join(TMP_DIR, filename)
                 
                 try:
                     file.save(temp_path)
-                    blob_name, public_url = gcp_ops.save_pdf_file_to_bucket(
-                        temp_path, 
-                        PAPERS_BUCKET, 
-                        SESSION_ID
-                    )
+                    blob_name, public_url = gcp_ops.save_pdf_file_to_bucket(temp_path, PAPERS_BUCKET, SESSION_ID)
                     
                     if blob_name:
                         upload_count += 1
@@ -816,31 +896,31 @@ def upload_file():
                     print(f"Error processing file {filename}: {e}")
                     error_count += 1
                 finally:
-                    # Clean up temporary file regardless of success/failure
                     if os.path.exists(temp_path):
-                        try:
-                            os.remove(temp_path)
-                        except Exception as e:
-                            print(f"Error removing temporary file {temp_path}: {e}")
+                        os.remove(temp_path)
             else:
                 error_count += 1
         
-        # Clean up the temporary directory after all files are processed
+        # Clean up temporary directory
         try:
-            shutil.rmtree(TMP_DIR)
+            os.rmdir(TMP_DIR)  # Only removes if empty
         except Exception as e:
-            print(f"Error removing temporary directory {TMP_DIR}: {e}")
+            print(f"Error removing temporary directory: {e}")
         
+        # Provide feedback about uploaded and skipped files
         if upload_count > 0:
             flash(f'Successfully uploaded {upload_count} file(s)')
         if error_count > 0:
             flash(f'Failed to upload {error_count} file(s)')
+        if skipped_files:
+            skipped_msg = 'Please retry uploading these files separately: ' + ', '.join(skipped_files)
+            flash(skipped_msg)
         
         return redirect(url_for('upload_file'))
 
-    # GET request handling
     files = gcp_ops.get_uploaded_files(PAPERS_BUCKET, SESSION_ID)
     return render_template('upload_images.html', files=files)
+
 
 #---------------------------------------------------------------------------------------------
 #--------------------------------------- COLOSUS----------------------------------------------
