@@ -141,7 +141,7 @@
                             d.bbox.split(';').map(bbox => ({
                                 bbox,
                                 color: getRandomColor(),
-                                yolo_bbox: ''
+                                yolo_bbox: ''  // Will be populated when drawn
                             })) : []
                     })));
                     setTotalImages(data.total_images);
@@ -282,7 +282,7 @@
                 });
             };
 
-            const handleMouseUp = async () => {
+            const handleMouseUp = () => {
                 if (!isDrawing || !selectedDiatom) return;
                 
                 setIsDrawing(false);
@@ -290,6 +290,7 @@
                     const newBbox = `${currentBox.x},${currentBox.y},${currentBox.x + currentBox.width},${currentBox.y + currentBox.height}`;
                     const newColor = getRandomColor();
                     
+                    // Generate YOLO bbox
                     const yolo_bbox = generateYoloBbox(
                         selectedType,
                         currentBox.x,
@@ -314,14 +315,11 @@
                         ...prev,
                         bboxes: [...prev.bboxes, { bbox: newBbox, yolo_bbox, color: newColor }]
                     }));
-
-                    // Trigger auto-save after adding new bounding box
-                    await handleSave();
                 }
                 setCurrentBox(null);
             };
 
-            const handleDoubleClick = async (e) => {
+            const handleDoubleClick = (e) => {
                 if (!selectedDiatom) return;
 
                 const rect = canvasRef.current.getBoundingClientRect();
@@ -357,9 +355,6 @@
                             })
                         }));
                     }
-
-                    // Trigger auto-save after removing bounding box
-                    await handleSave();
                 }
             };
 
@@ -372,6 +367,7 @@
                                 className="w-4/5 mx-auto mt-5"
                             />
                             
+                            {/* Add navigation buttons here */}
                             <div className="flex flex-col gap-3 px-4 mt-6">
                                 <a href="/modules" 
                                 className="px-4 py-3 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors duration-200">
@@ -389,9 +385,9 @@
                                 className="px-4 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-md hover:bg-white/10 transition-colors duration-200">
                                     View Diatoms Data
                                 </a>
-                                <a href="/segmentation" 
+                                <a href="/label" 
                                 className="px-4 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-md hover:bg-white/10 transition-colors duration-200">
-                                    Segmentation Images
+                                    Label Images
                                 </a>
                             </div>
                         </div>
@@ -435,6 +431,17 @@
                                     className="bg-yellow-400 text-black px-8 py-3 rounded-lg font-bold disabled:opacity-50 transform transition-all duration-200 hover:scale-105 hover:bg-yellow-300 hover:shadow-lg disabled:hover:scale-100 disabled:hover:bg-yellow-400 disabled:hover:shadow-none"
                                 >
                                     Previous
+                                </button>
+                                <button 
+                                    onClick={handleSave}
+                                    disabled={isSaving}
+                                    className="bg-green-600 text-white px-12 py-3 rounded-lg font-bold transform transition-all duration-200 hover:scale-105 hover:bg-green-500 hover:shadow-lg flex items-center justify-center space-x-2 min-w-[120px]"
+                                >
+                                    {isSaving ? (
+                                        <CircularProgress progress={saveProgress} />
+                                    ) : (
+                                        <span>Save</span>
+                                    )}
                                 </button>
                                 <button 
                                     onClick={() => window.location.href = '/api/download'}
