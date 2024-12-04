@@ -356,7 +356,10 @@
                 const ctx = canvas.getContext('2d');
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+
+
                 // Draw completed polygons
+                // Replace the existing polygon drawing section with this:
                 polygons.forEach((polygon, index) => {
                     if (polygon.points.length < 3) return;
 
@@ -378,9 +381,15 @@
                         ctx.lineWidth = 2;
                         ctx.stroke();
                         
-                        ctx.fillStyle = `${polygon.color}40`;
+                        ctx.fillStyle = `${polygon.color}80`;  // Selected polygons are more opaque
+                    } else {
+                        ctx.strokeStyle = polygon.color;
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+                        
+                        ctx.fillStyle = `${polygon.color}40`;  // Non-selected polygons are more transparent
                     }
-                    ctx.fill();
+                    ctx.fill();  // Fill needs to be called after setting fillStyle
                     
                     if (isSelected) {
                         const centerX = polygon.points.reduce((sum, p) => sum + p.x, 0) / polygon.points.length;
@@ -399,6 +408,11 @@
                     }
                 });
 
+
+
+
+
+
                 // Draw current polygon
                 if (currentPolygon.length > 0) {
                     ctx.beginPath();
@@ -415,6 +429,9 @@
                     ctx.stroke();
                 }
             };
+
+
+
 
             const handleCanvasClick = async (e) => {
                 const rect = canvasRef.current.getBoundingClientRect();
