@@ -13,8 +13,6 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useCallback } = React;
-
         function DiatomeSelector({ selected, setSelected }) {
             const options = [
                 { label: 'Incomplete Diatom', value: 0 },
@@ -46,6 +44,38 @@
                 </div>
             );
         }
+
+        function CircularProgress({ progress }) {
+            const radius = 20;
+            const circumference = 2 * Math.PI * radius;
+            const strokeDashoffset = circumference - (progress / 100) * circumference;
+            
+            return (
+                <svg className="transform -rotate-90 w-12 h-12">
+                    <circle
+                        className="text-gray-300"
+                        strokeWidth="4"
+                        stroke="currentColor"
+                        fill="transparent"
+                        r={radius}
+                        cx="24"
+                        cy="24"
+                    />
+                    <circle
+                        className="text-green-500"
+                        strokeWidth="4"
+                        strokeDasharray={circumference}
+                        strokeDashoffset={strokeDashoffset}
+                        strokeLinecap="round"
+                        stroke="currentColor"
+                        fill="transparent"
+                        r={radius}
+                        cx="24"
+                        cy="24"
+                    />
+                </svg>
+            );
+        }
         function Toast({ message, onClose, type = 'success' }) {
             React.useEffect(() => {
                 const timer = setTimeout(() => {
@@ -66,73 +96,84 @@
             );
         }
 
+        const generateYoloBbox = (diatom_selector_value, x1, y1, x2, y2, image_width, image_height) => {
+            const x_center = (x1 + x2) / (2 * image_width);
+            const y_center = (y1 + y2) / (2 * image_height);
+            const width = (x2 - x1) / image_width;
+            const height = (y2 - y1) / image_height;
+            return `${diatom_selector_value} ${x_center.toFixed(6)} ${y_center.toFixed(6)} ${width.toFixed(6)} ${height.toFixed(6)}`;
+        };
+
         function DiatomLabeler() {
-            const [imageIndex, setImageIndex] = useState(0);
-            const [totalImages, setTotalImages] = useState(0);
-            const [diatoms, setDiatoms] = useState([]);
-            const [selectedDiatom, setSelectedDiatom] = useState(null);
-            const [isDrawing, setIsDrawing] = useState(false);
-            const [startPoint, setStartPoint] = useState({ x: 0, y: 0 });
-            const [currentBox, setCurrentBox] = useState(null);
-            const [imageUrl, setImageUrl] = useState('');
-            const [isSaving, setIsSaving] = useState(false);
-            const [showToast, setShowToast] = useState(false);
-            const [toastMessage, setToastMessage] = useState('');
-            const [toastType, setToastType] = useState('success');
-            const [selectedType, setSelectedType] = useState(1);
-            const [textData, setTextData] = useState(null);
-                    
+            const [imageIndex, setImageIndex] = React.useState(0);
+            const [totalImages, setTotalImages] = React.useState(0);
+            const [diatoms, setDiatoms] = React.useState([]);
+            const [selectedDiatom, setSelectedDiatom] = React.useState(null);
+            const [isDrawing, setIsDrawing] = React.useState(false);
+            const [startPoint, setStartPoint] = React.useState({ x: 0, y: 0 });
+            const [currentBox, setCurrentBox] = React.useState(null);
+            const [imageUrl, setImageUrl] = React.useState('');
+            const [isSaving, setIsSaving] = React.useState(false);
+            const [saveProgress, setSaveProgress] = React.useState(0);
+            const [showToast, setShowToast] = React.useState(false);
+            const [toastMessage, setToastMessage] = React.useState('');
+            const [toastType, setToastType] = React.useState('success');
+            const [selectedType, setSelectedType] = React.useState(1);
+            const [textData, setTextData] = React.useState(null);
+            
             const canvasRef = React.useRef(null);
             const imageRef = React.useRef(null);
             const containerRef = React.useRef(null);
+
             const getRandomColor = () => {
                 const colors = ['#2ecc71', '#e74c3c', '#3498db', '#f1c40f', '#9b59b6', '#1abc9c'];
                 return colors[Math.floor(Math.random() * colors.length)];
             };
 
-            const loadImageData = useCallback(async (index) => {
+            const loadImageData = async (index) => {
                 try {
                     const response = await fetch(`/api/diatoms?index=${index}`);
-                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                     const data = await response.json();
                     if (data.error) {
                         console.error('API Error:', data.error);
                         return;
                     }
-
                     setImageUrl(data.data.image_url);
-                    const transformedDiatoms = data.data.info.map(d => ({
+                    setDiatoms(data.data.info.map(d => ({
                         ...d,
                         bboxes: d.bbox ? 
-                            d.bbox.split(';').map((bbox, idx) => ({
+                            d.bbox.split(';').map(bbox => ({
                                 bbox,
                                 color: getRandomColor(),
-                                yolo_bbox: d.yolo_bbox ? d.yolo_bbox.split(';')[idx] : ''
+                                yolo_bbox: ''
                             })) : []
-                    }));
-                    
-                    setDiatoms(transformedDiatoms);
+                    })));
                     setTotalImages(data.total_images);
                     setImageIndex(data.current_index);
-
-                    if (selectedDiatom) {
-                        const updatedSelected = transformedDiatoms.find(d => d.label[0] === selectedDiatom.label[0]);
-                        setSelectedDiatom(updatedSelected || null);
-                    }
                 } catch (error) {
                     console.error('Error loading image data:', error);
-                    setToastMessage('Error loading image data');
-                    setToastType('warning');
-                    setShowToast(true);
                 }
-            }, [selectedDiatom]);
-
-            useEffect(() => {
+            };
+            React.useEffect(() => {
                 loadImageData(imageIndex);
-            }, [imageIndex, loadImageData]);
+            }, [imageIndex]);
+
+            const handlePrevious = () => {
+                setImageIndex(prev => Math.max(0, prev - 1));
+            };
+
+            const handleNext = () => {
+                setImageIndex(prev => Math.min(totalImages - 1, prev + 1));
+            };
 
             const handleSave = async () => {
                 setIsSaving(true);
+                setSaveProgress(0);
+                
+                const progressInterval = setInterval(() => {
+                    setSaveProgress(prev => Math.min(prev + 10, 90));
+                }, 100);
+
                 try {
                     const dataToSave = diatoms.map(d => ({
                         ...d,
@@ -143,54 +184,39 @@
 
                     const response = await fetch('/api/save', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
                         body: JSON.stringify({ 
                             image_index: imageIndex, 
-                            info: dataToSave
+                            info: dataToSave,
+                            diatom_type: selectedType
                         })
                     });
                     
                     const data = await response.json();
+                    
+                    clearInterval(progressInterval);
+                    setSaveProgress(100);
+                    
                     if (data.success) {
                         setToastMessage('Labels saved successfully!');
                         setToastType('success');
                         setShowToast(true);
-                        await loadImageData(imageIndex);
                     } else {
-                        throw new Error(data.error || 'Failed to save labels');
+                        throw new Error(data.error);
                     }
                 } catch (error) {
                     console.error('Error saving data:', error);
-                    setToastMessage('Error saving labels');
-                    setToastType('warning');
-                    setShowToast(true);
                 } finally {
-                    setIsSaving(false);
+                    setTimeout(() => {
+                        setIsSaving(false);
+                        setSaveProgress(0);
+                    }, 500);
                 }
             };
 
-            const handleDiatomListAssistant = async () => {
-                try {
-                    const response = await fetch(`/api/diatom_list_assistant?index=${imageIndex}`);
-                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                    const data = await response.json();
-                    setTextData(data);
-                    
-                    if (data.data_saved) {
-                        await loadImageData(imageIndex);
-                        setToastMessage('New species added successfully!');
-                        setToastType('success');
-                        setShowToast(true);
-                    }
-                } catch (error) {
-                    console.error('Error fetching text data:', error);
-                    setToastMessage('Error fetching diatom list data');
-                    setToastType('warning');
-                    setShowToast(true);
-                }
-            };
-
-            const drawAllBoundingBoxes = useCallback(() => {
+            const drawAllBoundingBoxes = () => {
                 const canvas = canvasRef.current;
                 if (!canvas) return;
 
@@ -212,65 +238,60 @@
                 if (currentBox) {
                     ctx.strokeStyle = '#2ecc71';
                     ctx.lineWidth = 3;
-                    ctx.strokeRect(currentBox.x, currentBox.y, currentBox.width, currentBox.height);
+                    ctx.strokeRect(
+                        currentBox.x,
+                        currentBox.y,
+                        currentBox.width,
+                        currentBox.height
+                    );
                 }
-            }, [diatoms, currentBox]);
-            useEffect(() => {
-               drawAllBoundingBoxes();
-           }, [drawAllBoundingBoxes]);
+            };
 
-           const handleImageLoad = useCallback(() => {
-               const canvas = canvasRef.current;
-               const container = containerRef.current;
-               if (canvas && container) {
-                   canvas.width = container.offsetWidth;
-                   canvas.height = container.offsetHeight;
-                   drawAllBoundingBoxes();
-               }
-           }, [drawAllBoundingBoxes]);
+            React.useEffect(() => {
+                drawAllBoundingBoxes();
+            }, [diatoms, currentBox, selectedDiatom]);
 
-           const handlePrevious = () => setImageIndex(prev => Math.max(0, prev - 1));
-           const handleNext = () => setImageIndex(prev => Math.min(totalImages - 1, prev + 1));
+            const handleImageLoad = () => {
+                const canvas = canvasRef.current;
+                const container = containerRef.current;
+                if (canvas && container) {
+                    canvas.width = container.offsetWidth;
+                    canvas.height = container.offsetHeight;
+                    drawAllBoundingBoxes();
+                }
+            };
 
-           const generateYoloBbox = useCallback((type, x1, y1, x2, y2, imageWidth, imageHeight) => {
-               const x_center = (x1 + x2) / (2 * imageWidth);
-               const y_center = (y1 + y2) / (2 * imageHeight);
-               const width = (x2 - x1) / imageWidth;
-               const height = (y2 - y1) / imageHeight;
-               return `${type} ${x_center.toFixed(6)} ${y_center.toFixed(6)} ${width.toFixed(6)} ${height.toFixed(6)}`;
-           }, []);
+            const handleMouseDown = (e) => {
+                if (!selectedDiatom) {
+                    setToastMessage('Please select a label from the right sidebar before drawing boxes');
+                    setToastType('warning');
+                    setShowToast(true);
+                    return;
+                }
+                
+                const rect = canvasRef.current.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                setIsDrawing(true);
+                setStartPoint({ x, y });
+            };
 
-           const handleMouseDown = (e) => {
-               if (!selectedDiatom) {
-                   setToastMessage('Please select a label from the right sidebar before drawing boxes');
-                   setToastType('warning');
-                   setShowToast(true);
-                   return;
-               }
-               
-               const rect = canvasRef.current.getBoundingClientRect();
-               setIsDrawing(true);
-               setStartPoint({ 
-                   x: e.clientX - rect.left,
-                   y: e.clientY - rect.top
-               });
-           };
-
-           const handleMouseMove = (e) => {
-               if (!isDrawing) return;
-               
-               const rect = canvasRef.current.getBoundingClientRect();
-               const x = e.clientX - rect.left;
-               const y = e.clientY - rect.top;
-               
-               setCurrentBox({
-                   x: Math.min(x, startPoint.x),
-                   y: Math.min(y, startPoint.y),
-                   width: Math.abs(x - startPoint.x),
-                   height: Math.abs(y - startPoint.y)
-               });
-           };
-           const handleMouseUp = async () => {
+            const handleMouseMove = (e) => {
+                if (!isDrawing) return;
+                
+                const rect = canvasRef.current.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                setCurrentBox({
+                    x: Math.min(x, startPoint.x),
+                    y: Math.min(y, startPoint.y),
+                    width: Math.abs(x - startPoint.x),
+                    height: Math.abs(y - startPoint.y)
+                });
+            };
+            const handleMouseUp = async () => {
                 if (!isDrawing || !selectedDiatom) return;
                 
                 setIsDrawing(false);
@@ -290,14 +311,19 @@
                     
                     const updatedDiatoms = diatoms.map(d => 
                         d.label[0] === selectedDiatom.label[0] 
-                            ? { ...d, bboxes: [...d.bboxes, { bbox: newBbox, yolo_bbox, color: newColor }] }
+                            ? {
+                                ...d,
+                                bboxes: [...d.bboxes, { bbox: newBbox, yolo_bbox, color: newColor }]
+                            }
                             : d
                     );
                     setDiatoms(updatedDiatoms);
+                    
                     setSelectedDiatom(prev => ({
                         ...prev,
                         bboxes: [...prev.bboxes, { bbox: newBbox, yolo_bbox, color: newColor }]
                     }));
+
                     await handleSave();
                 }
                 setCurrentBox(null);
@@ -320,13 +346,11 @@
                 if (clickedDiatom) {
                     const updatedDiatoms = diatoms.map(d => {
                         if (d.label[0] === clickedDiatom.label[0]) {
-                            return {
-                                ...d,
-                                bboxes: d.bboxes.filter(box => {
-                                    const [x1, y1, x2, y2] = box.bbox.split(',').map(Number);
-                                    return !(x >= x1 && x <= x2 && y >= y1 && y <= y2);
-                                })
-                            };
+                            const updatedBboxes = d.bboxes.filter(box => {
+                                const [x1, y1, x2, y2] = box.bbox.split(',').map(Number);
+                                return !(x >= x1 && x <= x2 && y >= y1 && y <= y2);
+                            });
+                            return { ...d, bboxes: updatedBboxes };
                         }
                         return d;
                     });
@@ -341,6 +365,7 @@
                             })
                         }));
                     }
+
                     await handleSave();
                 }
             };
@@ -353,21 +378,27 @@
                             alt="DiatomHub Logo" 
                             className="w-4/5 mx-auto mt-5"
                         />
+                        
                         <div className="flex flex-col gap-3 px-4 mt-6">
-                            <a href="/modules" className="px-4 py-3 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors duration-200">
+                            <a href="/modules" 
+                            className="px-4 py-3 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors duration-200">
                                 View Installed Modules
                             </a>
-                            <a href="/all_papers" className="px-4 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-md hover:bg-white/10 transition-colors duration-200">
+                            <a href="/all_papers" 
+                            className="px-4 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-md hover:bg-white/10 transition-colors duration-200">
                                 View Papers
                             </a>
-                            <a href="/view_uploaded_pdfs" className="px-4 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-md hover:bg-white/10 transition-colors duration-200">
+                            <a href="/view_uploaded_pdfs" 
+                            className="px-4 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-md hover:bg-white/10 transition-colors duration-200">
                                 View Uploaded PDFs
                             </a>
-                            <a href="/diatoms_data" className="px-4 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-md hover:bg-white/10 transition-colors duration-200">
+                            <a href="/diatoms_data" 
+                            className="px-4 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-md hover:bg-white/10 transition-colors duration-200">
                                 View Diatoms Data
                             </a>
-                            <a href="/segmentation" className="px-4 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-md hover:bg-white/10 transition-colors duration-200">
-                                Label Segmentations
+                            <a href="/label" 
+                            className="px-4 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-md hover:bg-white/10 transition-colors duration-200">
+                                Label Images
                             </a>
                         </div>
                     </div>
@@ -382,8 +413,11 @@
                                 selected={selectedType}
                                 setSelected={setSelectedType}
                             />
-
-                            <div ref={containerRef} className="relative w-full max-w-4xl mt-4">
+                            
+                            <div 
+                                ref={containerRef}
+                                className="relative w-full max-w-4xl mt-4"
+                            >
                                 <img
                                     ref={imageRef}
                                     src={imageUrl}
@@ -400,6 +434,7 @@
                                     onDoubleClick={handleDoubleClick}
                                 />
                             </div>
+                            
                             <div className="flex justify-center space-x-4 mt-6">
                                 <button 
                                     onClick={handlePrevious}
@@ -430,6 +465,11 @@
                                         <code className="text-sm">{JSON.stringify(textData.labels)}</code>
                                     </div>
                                     
+                                    <h3 className="text-xl font-bold mb-4">PDF Text Content:</h3>
+                                    <div className="bg-gray-100 p-4 rounded-md max-h-60 overflow-y-auto mb-6">
+                                        <p className="text-sm whitespace-pre-wrap">{textData.pdf_text_content}</p>
+                                    </div>
+
                                     {textData.species_data && textData.species_data.length > 0 && (
                                         <>
                                             <h3 className="text-xl font-bold mb-4">Newly Found Species:</h3>
@@ -438,6 +478,7 @@
                                             </div>
                                         </>
                                     )}
+
                                     {textData.message && (
                                         <div className={`p-4 rounded-md mb-6 ${
                                             textData.message.includes('success') ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
@@ -445,9 +486,10 @@
                                             <p className="text-sm">{textData.message}</p>
                                         </div>
                                     )}
+
                                     {textData.data_saved && (
                                         <div className="bg-blue-100 text-blue-700 p-4 rounded-md">
-                                            <p className="text-sm">✓ New species data has been saved and synchronized</p>
+                                            <p className="text-sm">✓ New species data has been saved to GCP</p>
                                         </div>
                                     )}
                                 </div>
@@ -455,11 +497,24 @@
                         </div>
                     </div>
 
-                    <div className="w-96 bg-gray-800 fixed right-0 h-full overflow-y-auto custom-scrollbar">
+                    <div className="w-96 bg-gray-800 fixed right-0 h-full overflow-y-auto">
                         <div className="flex justify-between items-center py-5 border-b border-gray-700 px-4">
                             <div className="text-2xl font-bold text-white">Labels</div>
                             <button
-                                onClick={handleDiatomListAssistant}
+                                onClick={async () => {
+                                    try {
+                                        const response = await fetch(`/api/diatom_list_assistant?index=${imageIndex}`);
+                                        const data = await response.json();
+                                        setTextData(data);
+                                        
+                                        // If new species were found and saved, refresh the image data
+                                        if (data.data_saved) {
+                                            await loadImageData(imageIndex);
+                                        }
+                                    } catch (error) {
+                                        console.error('Error fetching text data:', error);
+                                    }
+                                }}
                                 className="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 transition-colors duration-200"
                             >
                                 Diatom List Assistant
@@ -470,9 +525,10 @@
                                 <li
                                     key={diatom.label[0]}
                                     onClick={() => setSelectedDiatom(diatom)}
-                                    className={`text-white p-3 cursor-pointer border-b border-gray-700 transition-colors ${
-                                        selectedDiatom?.label[0] === diatom.label[0] ? 'bg-green-500' : 'hover:bg-gray-700'
-                                    }`}
+                                    className={`
+                                        text-white p-3 cursor-pointer border-b border-gray-700 transition-colors
+                                        ${selectedDiatom?.label[0] === diatom.label[0] ? 'bg-green-500' : 'hover:bg-gray-700'}
+                                    `}
                                 >
                                     <div className="flex justify-between items-center">
                                         <span>{diatom.label[0]}</span>
@@ -496,7 +552,6 @@
             );
         }
 
-        // Add CSS animation styles
         const style = document.createElement('style');
         style.textContent = `
             @keyframes slide-up {
@@ -515,23 +570,9 @@
             circle {
                 transition: stroke-dashoffset 0.3s ease;
             }
-            .custom-scrollbar::-webkit-scrollbar {
-                width: 8px;
-            }
-            .custom-scrollbar::-webkit-scrollbar-track {
-                background: #1f2937;
-            }
-            .custom-scrollbar::-webkit-scrollbar-thumb {
-                background: #4b5563;
-                border-radius: 4px;
-            }
-            .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-                background: #6b7280;
-            }
         `;
         document.head.appendChild(style);
 
-        // Render the app
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<DiatomLabeler />);
     </script>
