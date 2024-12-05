@@ -425,6 +425,20 @@ class ClaudeAI:
             }
         ]
 
+
+
+    @staticmethod    
+    def reformat_labels_to_spaces(labels):
+        return [label.replace('_', ' ') for label in labels]
+    
+    
+    # Example usage
+    # labels = ["14 Lyrella_spectabilis", "15 Navicula_hennedyi_fo_granulata", "16 Lyrella_lyroides"]
+    # reformatted_labels = reformat_labels_to_spaces(labels)
+    # print(reformatted_labels)
+
+
+
     @staticmethod
     def part3_create_missing_species_prompt_and_messages(pdf_text_content: str, labels: List[str]) -> List[Dict[str, Any]]:
         """
@@ -667,3 +681,5 @@ class ClaudeAI:
         except Exception as e:
             logger.error(f"Error updating and saving papers: {str(e)}")
             return False
+    
+    

@@ -1002,6 +1002,7 @@ def get_diatom_list_assistant():
         # Extract existing labels from the info array
         labels = [info['label'][0] for info in current_image_data.get('info', [])]
         
+        
         # Find corresponding paper and pdf_text_content
         pdf_text_content = ""
         matching_paper = None
@@ -1015,10 +1016,14 @@ def get_diatom_list_assistant():
                 pdf_text_content = paper.get('pdf_text_content', '')
                 matching_paper = paper
                 break
+            
+                
 
         # Use Claude to find missing species
         claude = ClaudeAI()
-        messages = claude.part3_create_missing_species_prompt_and_messages(pdf_text_content, labels)
+        reformatted_labels = claude.reformat_labels_to_spaces(labels)
+        # messages = claude.part3_create_missing_species_prompt_and_messages(pdf_text_content, labels)
+        messages = claude.part3_create_missing_species_prompt_and_messages(pdf_text_content, reformatted_labels)
         response = claude.get_completion(messages)
 
         if "error" in response:
