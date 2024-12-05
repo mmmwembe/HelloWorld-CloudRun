@@ -943,6 +943,48 @@ def display_table():
     return render_template('colosus.html', data=data)
 
 #-----------------------------------------------------------------------------------------------
+#------------------------------Diatom List Assistant-------------------------------------------
+# The list assistant retrieves the missing diatom species and adds them to diatoms_data for the image
+@app.route('/api/diatom_list_assistant', methods=['GET'])
+def get_diatom_list_assistant():
+    try:
+        image_index = request.args.get('index', 0, type=int)
+        
+        if not DIATOMS_DATA or image_index >= len(DIATOMS_DATA):
+            return jsonify({
+                'error': 'No data available or invalid index'
+            }), 404
+
+        # Get the current image data
+        current_image_data = DIATOMS_DATA[image_index]
+        
+        # Extract labels from the info array
+        labels = [info['label'][0] for info in current_image_data.get('info', [])]
+        
+        # Find corresponding paper in PAPER_JSON_FILES
+        pdf_text_content = ""
+        for paper in PAPER_JSON_FILES:
+            if isinstance(paper.get('diatoms_data'), str):
+                paper_diatoms_data = json.loads(paper['diatoms_data'])
+            else:
+                paper_diatoms_data = paper.get('diatoms_data', {})
+                
+            if paper_diatoms_data.get('image_url') == current_image_data.get('image_url'):
+                pdf_text_content = paper.get('pdf_text_content', '')
+                break
+        
+        return jsonify({
+            'labels': labels,
+            'pdf_text_content': pdf_text_content
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error in get_diatom_list_assistant: {str(e)}")
+        return jsonify({
+            'error': f'Error retrieving diatom list assistant data: {str(e)}'
+        }), 500
+
+
 
 
 if __name__ == '__main__':
