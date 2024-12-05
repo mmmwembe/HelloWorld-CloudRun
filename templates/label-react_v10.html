@@ -17,7 +17,7 @@
             const options = [
                 { label: 'Incomplete Diatom', value: 0 },
                 { label: 'Complete Diatom', value: 1 },
-                { label: 'Fragmented Diatom', value: 2 },
+                { label: 'Fragment Diatom', value: 2 },
                 { label: 'Blurred Diatom', value: 3 },
                 { label: 'Diatom SideView', value: 4 }
             ];
@@ -76,6 +76,7 @@
                 </svg>
             );
         }
+
         function Toast({ message, onClose, type = 'success' }) {
             React.useEffect(() => {
                 const timer = setTimeout(() => {
@@ -95,7 +96,6 @@
                 </div>
             );
         }
-
         const generateYoloBbox = (diatom_selector_value, x1, y1, x2, y2, image_width, image_height) => {
             const x_center = (x1 + x2) / (2 * image_width);
             const y_center = (y1 + y2) / (2 * image_height);
@@ -154,6 +154,7 @@
                     console.error('Error loading image data:', error);
                 }
             };
+
             React.useEffect(() => {
                 loadImageData(imageIndex);
             }, [imageIndex]);
@@ -246,7 +247,6 @@
                     );
                 }
             };
-
             React.useEffect(() => {
                 drawAllBoundingBoxes();
             }, [diatoms, currentBox, selectedDiatom]);
@@ -291,6 +291,7 @@
                     height: Math.abs(y - startPoint.y)
                 });
             };
+
             const handleMouseUp = async () => {
                 if (!isDrawing || !selectedDiatom) return;
                 
@@ -460,38 +461,15 @@
 
                             {textData && (
                                 <div className="mt-8 p-6 bg-white rounded-lg shadow-lg w-full max-w-4xl">
-                                    <h3 className="text-xl font-bold mb-4">Current Labels:</h3>
+                                    <h3 className="text-xl font-bold mb-4">Labels in Image:</h3>
                                     <div className="bg-gray-100 p-4 rounded-md mb-6">
                                         <code className="text-sm">{JSON.stringify(textData.labels)}</code>
                                     </div>
                                     
                                     <h3 className="text-xl font-bold mb-4">PDF Text Content:</h3>
-                                    <div className="bg-gray-100 p-4 rounded-md max-h-60 overflow-y-auto mb-6">
+                                    <div className="bg-gray-100 p-4 rounded-md max-h-60 overflow-y-auto">
                                         <p className="text-sm whitespace-pre-wrap">{textData.pdf_text_content}</p>
                                     </div>
-
-                                    {textData.species_data && textData.species_data.length > 0 && (
-                                        <>
-                                            <h3 className="text-xl font-bold mb-4">Newly Found Species:</h3>
-                                            <div className="bg-gray-100 p-4 rounded-md mb-6">
-                                                <code className="text-sm">{JSON.stringify(textData.labels_retrieved)}</code>
-                                            </div>
-                                        </>
-                                    )}
-
-                                    {textData.message && (
-                                        <div className={`p-4 rounded-md mb-6 ${
-                                            textData.message.includes('success') ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                                        }`}>
-                                            <p className="text-sm">{textData.message}</p>
-                                        </div>
-                                    )}
-
-                                    {textData.data_saved && (
-                                        <div className="bg-blue-100 text-blue-700 p-4 rounded-md">
-                                            <p className="text-sm">✓ New species data has been saved to GCP</p>
-                                        </div>
-                                    )}
                                 </div>
                             )}
                         </div>
@@ -506,18 +484,13 @@
                                         const response = await fetch(`/api/diatom_list_assistant?index=${imageIndex}`);
                                         const data = await response.json();
                                         setTextData(data);
-                                        
-                                        // If new species were found and saved, refresh the image data
-                                        if (data.data_saved) {
-                                            await loadImageData(imageIndex);
-                                        }
                                     } catch (error) {
                                         console.error('Error fetching text data:', error);
                                     }
                                 }}
                                 className="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 transition-colors duration-200"
                             >
-                                Diatom List Assistant
+                                List Assistant
                             </button>
                         </div>
                         <ul>

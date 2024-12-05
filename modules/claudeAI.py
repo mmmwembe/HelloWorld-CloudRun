@@ -426,6 +426,89 @@ class ClaudeAI:
         ]
 
     @staticmethod
+    def part3_create_missing_species_prompt_and_messages(pdf_text_content: str, labels: List[str]) -> List[Dict[str, Any]]:
+        """
+        Creates a prompt and messages for finding missing species in PDF text content.
+        
+        Args:
+            pdf_text_content (str): The complete text content from the PDF
+            labels (list): List of existing species labels
+            
+        Returns:
+            list: Array of message objects for the Claude API request
+        """
+        prompt = f"""You are a JSON API that can only respond with valid JSON. Never include explanations or text outside the JSON structure.
+
+        TASK:
+        Analyze the provided PDF text content and identify species that are NOT in the current labels list.
+
+        CURRENT LABELS:
+        {json.dumps(labels)}
+
+        REQUIRED RESPONSE FORMAT:
+        Return ONLY a JSON object with this exact structure - no other text or explanation:
+        {{
+            "species_data": [
+                {{
+                    "label": ["<index> <formatted_species_name> eg 10 eg Lyrella_spectabilis"],
+                    "index": <number>,
+                    "species": "<formatted_species_name> eg Lyrella_spectabili",
+                    "bbox": "",
+                    "yolo_bbox": "",
+                    "segmentation": "",
+                    "embeddings": "",
+                    "full_species_info": {{
+                        "species_index": <number>,
+                        "species_name": "<name> eg Lyrella spectabilis",
+                        "species_authors": ["<author1>", "<author2>"],
+                        "species_year": <year>,
+                        "species_references": [
+                            {{
+                                "author": "<author>",
+                                "year": <year>,
+                                "figure": "<figure>"
+                            }}
+                        ],
+                        "formatted_species_name": "<name_with_underscores> eg Lyrella_spectabilis",
+                        "genus": "<genus>",
+                        "species_magnification": "<magnification> eg 1000",
+                        "species_scale_bar_microns": "<scale> eg 10",
+                        "species_note": "<success/failure message>"
+                    }}
+                }}
+            ],
+            "labels_retrieved": ["<index> <formatted_species_name>","<index> <formatted_species_name>",...],
+            "message": "<success_or_failure_message>"
+        }}
+
+        RULES:
+        1. Return ONLY valid JSON - no markdown, no explanation, no other text
+        2. Include ONLY species NOT present in current labels
+        3. Format species names with underscores instead of spaces
+        4. Include ALL fields in the structure, using empty strings for missing data
+        5. If no new species found, return empty arrays with appropriate message
+        6. Species index must match the index in the original text
+        7. Label format must be exactly: "<index> <formatted_species_name>"
+
+        YOUR RESPONSE MUST BE PURE JSON THAT CAN BE PARSED BY json.loads()"""
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"{pdf_text_content}\n\n{prompt}"
+                    }
+                ]
+            }
+        ]
+
+        return messages
+
+
+
+    @staticmethod
     def get_default_citation() -> Dict[str, str]:
         """
         Returns a dictionary containing default citation information for the Stidolph Diatom Atlas.

@@ -945,6 +945,47 @@ def display_table():
 #-----------------------------------------------------------------------------------------------
 #------------------------------Diatom List Assistant-------------------------------------------
 # The list assistant retrieves the missing diatom species and adds them to diatoms_data for the image
+# @app.route('/api/diatom_list_assistant', methods=['GET'])
+# def get_diatom_list_assistant():
+#     try:
+#         image_index = request.args.get('index', 0, type=int)
+        
+#         if not DIATOMS_DATA or image_index >= len(DIATOMS_DATA):
+#             return jsonify({
+#                 'error': 'No data available or invalid index'
+#             }), 404
+
+#         # Get the current image data
+#         current_image_data = DIATOMS_DATA[image_index]
+        
+#         # Extract labels from the info array
+#         labels = [info['label'][0] for info in current_image_data.get('info', [])]
+        
+#         # Find corresponding paper in PAPER_JSON_FILES
+#         pdf_text_content = ""
+#         for paper in PAPER_JSON_FILES:
+#             if isinstance(paper.get('diatoms_data'), str):
+#                 paper_diatoms_data = json.loads(paper['diatoms_data'])
+#             else:
+#                 paper_diatoms_data = paper.get('diatoms_data', {})
+                
+#             if paper_diatoms_data.get('image_url') == current_image_data.get('image_url'):
+#                 pdf_text_content = paper.get('pdf_text_content', '')
+#                 break
+        
+#         return jsonify({
+#             'labels': labels,
+#             'pdf_text_content': pdf_text_content
+#         })
+        
+#     except Exception as e:
+#         app.logger.error(f"Error in get_diatom_list_assistant: {str(e)}")
+#         return jsonify({
+#             'error': f'Error retrieving diatom list assistant data: {str(e)}'
+#         }), 500
+
+
+
 @app.route('/api/diatom_list_assistant', methods=['GET'])
 def get_diatom_list_assistant():
     try:
@@ -958,11 +999,12 @@ def get_diatom_list_assistant():
         # Get the current image data
         current_image_data = DIATOMS_DATA[image_index]
         
-        # Extract labels from the info array
+        # Extract existing labels from the info array
         labels = [info['label'][0] for info in current_image_data.get('info', [])]
         
-        # Find corresponding paper in PAPER_JSON_FILES
+        # Find corresponding paper and pdf_text_content
         pdf_text_content = ""
+        matching_paper = None
         for paper in PAPER_JSON_FILES:
             if isinstance(paper.get('diatoms_data'), str):
                 paper_diatoms_data = json.loads(paper['diatoms_data'])
@@ -971,20 +1013,78 @@ def get_diatom_list_assistant():
                 
             if paper_diatoms_data.get('image_url') == current_image_data.get('image_url'):
                 pdf_text_content = paper.get('pdf_text_content', '')
+                matching_paper = paper
                 break
-        
+
+        # Use Claude to find missing species
+        claude = ClaudeAI()
+        messages = claude.part3_create_missing_species_prompt_and_messages(pdf_text_content, labels)
+        response = claude.get_completion(messages)
+
+        if "error" in response:
+            return jsonify({
+                'error': 'Failed to process text with Claude',
+                'details': response["error"]
+            }), 500
+
+        if not isinstance(response, dict):
+            return jsonify({
+                'error': 'Invalid response format from Claude',
+                'details': 'Expected dictionary, got ' + str(type(response))
+            }), 500
+
+        # Validate response has required fields
+        required_fields = ['species_data', 'labels_retrieved', 'message']
+        missing_fields = [field for field in required_fields if field not in response]
+        if missing_fields:
+            return jsonify({
+                'error': 'Missing required fields in Claude response',
+                'details': f"Missing fields: {', '.join(missing_fields)}"
+            }), 500
+
+        # Add new species to current_image_data's info array
+        new_species_added = False
+        if response['species_data']:
+            current_image_data['info'].extend(response['species_data'])
+            new_species_added = True
+
+            # Update the matching paper's diatoms_data
+            if matching_paper:
+                if isinstance(matching_paper['diatoms_data'], str):
+                    matching_paper['diatoms_data'] = json.loads(matching_paper['diatoms_data'])
+                matching_paper['diatoms_data'] = current_image_data
+
+                # Save updated data to GCP
+                success = ClaudeAI.update_and_save_papers(
+                    PAPERS_JSON_PUBLIC_URL,
+                    PAPER_JSON_FILES,
+                    DIATOMS_DATA
+                )
+                if not success:
+                    logger.error("Failed to save updated data to GCP")
+
+        # Return the complete data for frontend processing
         return jsonify({
             'labels': labels,
-            'pdf_text_content': pdf_text_content
+            'pdf_text_content': pdf_text_content,
+            'species_data': response.get('species_data', []),
+            'labels_retrieved': response.get('labels_retrieved', []),
+            'message': response.get('message', ''),
+            'data_saved': new_species_added
         })
         
-    except Exception as e:
-        app.logger.error(f"Error in get_diatom_list_assistant: {str(e)}")
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON parsing error in diatom_list_assistant: {str(e)}")
         return jsonify({
-            'error': f'Error retrieving diatom list assistant data: {str(e)}'
+            'error': 'Failed to parse JSON response',
+            'details': str(e)
         }), 500
-
-
+    except Exception as e:
+        logger.error(f"Error in diatom_list_assistant: {str(e)}")
+        return jsonify({
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
 
 
 if __name__ == '__main__':
