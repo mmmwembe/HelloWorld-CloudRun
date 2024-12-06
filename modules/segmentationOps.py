@@ -162,12 +162,68 @@ class SegmentationOps:
         }
         return label_map.get(label, "Unknown")
 
+    # def process_image_segmentations(self, image_data: Dict[str, Any], segmentation_text: str) -> Dict[str, Any]:
+    #     """
+    #     Process and align segmentations with bboxes for an image.
+    #     """
+    #     try:
+    #         if not segmentation_text or not image_data.get('segmentation_indices_array'):
+    #             return image_data
+                
+    #         image_width = float(image_data.get('image_width', 1024))
+    #         image_height = float(image_data.get('image_height', 768))
+    #         bboxes = image_data.get('info', [])
+            
+    #         # Parse segmentations
+    #         segmentations = self.parse_segmentation_file(segmentation_text)
+            
+    #         # Process each segmentation
+    #         for seg in segmentations:
+    #             # Find corresponding entry in segmentation_indices_array
+    #             seg_dict = next((s for s in image_data['segmentation_indices_array'] 
+    #                            if s['index'] == seg['index']), None)
+                
+    #             if not seg_dict:
+    #                 continue
+                
+    #             # Update segmentation data
+    #             seg_dict['segmentation_points'] = seg['points_string']
+    #             seg_dict['points_count'] = seg['points_count']
+                
+    #             # Find matching bbox
+    #             matching_bbox = self.find_matching_bbox(
+    #                 seg['points_string'],
+    #                 bboxes,
+    #                 image_width,
+    #                 image_height
+    #             )
+                
+    #             if matching_bbox:
+    #                 seg_dict['bbox'] = matching_bbox['bbox']
+    #                 seg_dict['yolo_bbox'] = matching_bbox['yolo_bbox']
+    #                 seg_dict['species'] = matching_bbox.get('species', '')
+                    
+    #                 self.logger.info(f"Matched segmentation {seg['index']} to bbox for species {matching_bbox.get('species', '')}")
+    #             else:
+    #                 # Clear bbox-related fields if no match found
+    #                 seg_dict['bbox'] = ""
+    #                 seg_dict['yolo_bbox'] = ""
+    #                 seg_dict['species'] = ""
+            
+    #         return image_data
+            
+    #     except Exception as e:
+    #         self.logger.error(f"Error processing image segmentations: {str(e)}")
+    #         return image_data
+        
+        
+        
     def process_image_segmentations(self, image_data: Dict[str, Any], segmentation_text: str) -> Dict[str, Any]:
         """
         Process and align segmentations with bboxes for an image.
         """
         try:
-            if not segmentation_text or not image_data.get('segmentation_indices_array'):
+            if not segmentation_text or 'segmentation_indices_array' not in image_data:
                 return image_data
                 
             image_width = float(image_data.get('image_width', 1024))
@@ -181,7 +237,7 @@ class SegmentationOps:
             for seg in segmentations:
                 # Find corresponding entry in segmentation_indices_array
                 seg_dict = next((s for s in image_data['segmentation_indices_array'] 
-                               if s['index'] == seg['index']), None)
+                            if s['index'] == seg['index']), None)
                 
                 if not seg_dict:
                     continue
@@ -189,6 +245,15 @@ class SegmentationOps:
                 # Update segmentation data
                 seg_dict['segmentation_points'] = seg['points_string']
                 seg_dict['points_count'] = seg['points_count']
+                
+                # Calculate denormalized points
+                points = seg['points_string'].split()
+                denormalized = []
+                for i in range(0, len(points), 2):
+                    x = float(points[i]) * image_width
+                    y = float(points[i + 1]) * image_height
+                    denormalized.extend([str(round(x)), str(round(y))])
+                seg_dict['denormalized_segmentation_points'] = ' '.join(denormalized)
                 
                 # Find matching bbox
                 matching_bbox = self.find_matching_bbox(

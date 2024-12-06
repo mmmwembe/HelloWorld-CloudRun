@@ -437,6 +437,70 @@ def label():
     
     return render_template('label-react.html')
 
+# @app.route('/api/diatoms', methods=['GET'])
+# def get_diatoms():
+#     try:
+#         image_index = request.args.get('index', 0, type=int)
+        
+#         # Use the global DIATOMS_DATA
+#         global DIATOMS_DATA
+        
+#         # Check if we have any data
+#         if not DIATOMS_DATA:
+#             try:
+#                 # Try to reload the data
+#                 DIATOMS_DATA = ClaudeAI.get_DIATOMS_DATA(PAPERS_JSON_PUBLIC_URL)
+#                 if not DIATOMS_DATA:
+#                     return jsonify({
+#                         'current_index': 0,
+#                         'total_images': 0,
+#                         'data': {},
+#                         'error': 'No diatoms data available'
+#                     })
+#             except Exception as e:
+#                 app.logger.error(f"Error reloading diatoms data: {str(e)}")
+#                 return jsonify({
+#                     'current_index': 0,
+#                     'total_images': 0,
+#                     'data': {},
+#                     'error': 'Failed to load diatoms data'
+#                 })
+        
+#         # Ensure index is within bounds
+#         total_images = len(DIATOMS_DATA)
+#         image_index = min(max(0, image_index), total_images - 1)
+        
+#         # Log the state
+#         app.logger.info(f"Getting diatom data for index {image_index} of {total_images}")
+        
+#         try:
+#             current_image_data = DIATOMS_DATA[image_index]
+#             # Log the data being sent
+#             app.logger.info(f"Sending image data: {current_image_data.get('image_url', 'No URL')}")
+            
+#             return jsonify({
+#                 'current_index': image_index,
+#                 'total_images': total_images,
+#                 'data': current_image_data
+#             })
+#         except IndexError:
+#             app.logger.error(f"Failed to get data for index {image_index} from list of length {total_images}")
+#             return jsonify({
+#                 'current_index': 0,
+#                 'total_images': total_images,
+#                 'data': {},
+#                 'error': 'Invalid image index'
+#             })
+        
+#     except Exception as e:
+#         app.logger.error(f"Error in get_diatoms: {str(e)}")
+#         return jsonify({
+#             'current_index': 0,
+#             'total_images': 0,
+#             'data': {},
+#             'error': f'Error retrieving diatoms data: {str(e)}'
+#         }), 500
+
 @app.route('/api/diatoms', methods=['GET'])
 def get_diatoms():
     try:
@@ -470,19 +534,25 @@ def get_diatoms():
         total_images = len(DIATOMS_DATA)
         image_index = min(max(0, image_index), total_images - 1)
         
-        # Log the state
-        app.logger.info(f"Getting diatom data for index {image_index} of {total_images}")
-        
         try:
             current_image_data = DIATOMS_DATA[image_index]
-            # Log the data being sent
-            app.logger.info(f"Sending image data: {current_image_data.get('image_url', 'No URL')}")
+            
+            # Ensure segmentation data is loaded
+            if current_image_data.get('segmentation_url') and current_image_data.get('segmentation_indices_array'):
+                segmentation_text = gcp_ops.load_segmentation_data(current_image_data['segmentation_url'])
+                if segmentation_text:
+                    # Process segmentations to add denormalized points
+                    current_image_data = segmentation_ops.process_image_segmentations(
+                        current_image_data,
+                        segmentation_text
+                    )
             
             return jsonify({
                 'current_index': image_index,
                 'total_images': total_images,
                 'data': current_image_data
             })
+            
         except IndexError:
             app.logger.error(f"Failed to get data for index {image_index} from list of length {total_images}")
             return jsonify({
