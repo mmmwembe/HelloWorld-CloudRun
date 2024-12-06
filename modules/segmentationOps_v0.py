@@ -162,52 +162,62 @@ class SegmentationOps:
         }
         return label_map.get(label, "Unknown")
 
-    def get_bbox_from_denormalized_points(self, denormalized_points_str: str) -> str:
-        """
-        Convert denormalized segmentation points to bbox format "x1,y1,x2,y2"
-        where (x1,y1) is top-left corner and (x2,y2) is bottom-right corner
-        """
-        try:
-            points = [float(p) for p in denormalized_points_str.split()]
-            x_coords = points[0::2]  # [x1, x2, x3, ...]
-            y_coords = points[1::2]  # [y1, y2, y3, ...]
-            
-            x1 = min(x_coords)
-            y1 = min(y_coords)
-            x2 = max(x_coords)
-            y2 = max(y_coords)
-            
-            return f"{x1},{y1},{x2},{y2}"
-        except Exception as e:
-            self.logger.error(f"Error getting bbox from denormalized points: {str(e)}")
-            return ""
-
-    def calculate_bbox_overlap_ratio(self, denorm_points_bbox: str, bbox: str) -> float:
-        """
-        Calculate overlap ratio between denormalized points bbox and target bbox
-        """
-        try:
-            dp_x1, dp_y1, dp_x2, dp_y2 = map(float, denorm_points_bbox.split(','))
-            b_x1, b_y1, b_x2, b_y2 = map(float, bbox.split(','))
-            
-            # Calculate intersection
-            x_left = max(dp_x1, b_x1)
-            y_top = max(dp_y1, b_y1)
-            x_right = min(dp_x2, b_x2)
-            y_bottom = min(dp_y2, b_y2)
-            
-            if x_right < x_left or y_bottom < y_top:
-                return 0.0
+    # def process_image_segmentations(self, image_data: Dict[str, Any], segmentation_text: str) -> Dict[str, Any]:
+    #     """
+    #     Process and align segmentations with bboxes for an image.
+    #     """
+    #     try:
+    #         if not segmentation_text or not image_data.get('segmentation_indices_array'):
+    #             return image_data
                 
-            intersection_area = (x_right - x_left) * (y_bottom - y_top)
-            denorm_points_area = (dp_x2 - dp_x1) * (dp_y2 - dp_y1)
+    #         image_width = float(image_data.get('image_width', 1024))
+    #         image_height = float(image_data.get('image_height', 768))
+    #         bboxes = image_data.get('info', [])
             
-            return intersection_area / denorm_points_area if denorm_points_area > 0 else 0.0
+    #         # Parse segmentations
+    #         segmentations = self.parse_segmentation_file(segmentation_text)
             
-        except Exception as e:
-            self.logger.error(f"Error calculating bbox overlap ratio: {str(e)}")
-            return 0.0
-
+    #         # Process each segmentation
+    #         for seg in segmentations:
+    #             # Find corresponding entry in segmentation_indices_array
+    #             seg_dict = next((s for s in image_data['segmentation_indices_array'] 
+    #                            if s['index'] == seg['index']), None)
+                
+    #             if not seg_dict:
+    #                 continue
+                
+    #             # Update segmentation data
+    #             seg_dict['segmentation_points'] = seg['points_string']
+    #             seg_dict['points_count'] = seg['points_count']
+                
+    #             # Find matching bbox
+    #             matching_bbox = self.find_matching_bbox(
+    #                 seg['points_string'],
+    #                 bboxes,
+    #                 image_width,
+    #                 image_height
+    #             )
+                
+    #             if matching_bbox:
+    #                 seg_dict['bbox'] = matching_bbox['bbox']
+    #                 seg_dict['yolo_bbox'] = matching_bbox['yolo_bbox']
+    #                 seg_dict['species'] = matching_bbox.get('species', '')
+                    
+    #                 self.logger.info(f"Matched segmentation {seg['index']} to bbox for species {matching_bbox.get('species', '')}")
+    #             else:
+    #                 # Clear bbox-related fields if no match found
+    #                 seg_dict['bbox'] = ""
+    #                 seg_dict['yolo_bbox'] = ""
+    #                 seg_dict['species'] = ""
+            
+    #         return image_data
+            
+    #     except Exception as e:
+    #         self.logger.error(f"Error processing image segmentations: {str(e)}")
+    #         return image_data
+        
+        
+        
     def process_image_segmentations(self, image_data: Dict[str, Any], segmentation_text: str) -> Dict[str, Any]:
         """
         Process and align segmentations with bboxes for an image.
@@ -245,23 +255,33 @@ class SegmentationOps:
                     denormalized.extend([str(round(x)), str(round(y))])
                 seg_dict['denormalized_segmentation_points'] = ' '.join(denormalized)
                 
-                # Calculate denormalized points bbox
-                seg_dict['denorm_points_bbox'] = self.get_bbox_from_denormalized_points(seg_dict['denormalized_segmentation_points'])
-                
                 # Initialize default values
                 seg_dict['bbox'] = ""
                 seg_dict['yolo_bbox'] = ""
                 seg_dict['species'] = ""
-                seg_dict['overlap_ratio'] = 0.0
                 
-                # Find matching bbox using overlap ratio
-                max_overlap = 0.0
+                # Find matching bbox using denormalized points
+                points_array = [float(p) for p in denormalized]
+                max_overlap = 0
                 matching_bbox = None
                 
                 for bbox in bboxes:
-                    overlap = self.calculate_bbox_overlap_ratio(seg_dict['denorm_points_bbox'], bbox['bbox'])
+                    x1, y1, x2, y2 = map(float, bbox['bbox'].split(','))
                     
-                    if overlap > max_overlap and overlap >= 0.5:  # At least 50% overlap required
+                    # Count points inside bbox
+                    points_inside = 0
+                    total_points = len(points_array) // 2
+                    
+                    for point_idx in range(0, len(points_array), 2):
+                        x = points_array[point_idx]
+                        y = points_array[point_idx + 1]
+                        
+                        if x1 <= x <= x2 and y1 <= y <= y2:
+                            points_inside += 1
+                    
+                    overlap = points_inside / total_points if total_points > 0 else 0
+                    
+                    if overlap > max_overlap and overlap >= 0.5:  # At least 50% of points should be inside
                         max_overlap = overlap
                         matching_bbox = bbox
                 
@@ -269,8 +289,7 @@ class SegmentationOps:
                     seg_dict['bbox'] = matching_bbox['bbox']
                     seg_dict['yolo_bbox'] = matching_bbox['yolo_bbox']
                     seg_dict['species'] = matching_bbox.get('species', '')
-                    seg_dict['overlap_ratio'] = max_overlap
-                    self.logger.info(f"Matched segmentation {seg['index']} to bbox for species {matching_bbox.get('species', '')} with overlap ratio {max_overlap:.2f}")
+                    self.logger.info(f"Matched segmentation {seg['index']} to bbox for species {matching_bbox.get('species', '')}")
             
             return image_data
             
