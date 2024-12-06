@@ -7,9 +7,10 @@ import json
 import tempfile
 from threading import Thread, Lock
 from modules.installed_packages import get_installed_packages
-from modules import ClaudeAI
-from modules import GCPOps
-from modules import PDFOps
+# from modules import ClaudeAI
+# from modules import GCPOps
+# from modules import PDFOps
+from modules import ClaudeAI, GCPOps, PDFOps, SegmentationOps
 import logging
 import pandas as pd
 import shutil
@@ -50,7 +51,7 @@ def allowed_file(filename):
 
 # Create an instance of GCPOps
 gcp_ops = GCPOps()
-
+segmentation_ops = SegmentationOps()
 # Initialize the uploaded PDF files DataFrame
 try:
     UPLOADED_PDF_FILES_DF = gcp_ops.initialize_paper_upload_tracker_df_from_gcp(
@@ -1090,6 +1091,163 @@ def get_diatom_list_assistant():
             'error': 'Internal server error',
             'details': str(e)
         }), 500
+
+#--------------------------------------------Label Union ------------------------------------------------
+
+@app.route('/label_union')
+def label_union():
+    """Route for the label union interface"""
+    global DIATOMS_DATA
+    
+    try:
+        if not DIATOMS_DATA:
+            try:
+                DIATOMS_DATA = ClaudeAI.get_DIATOMS_DATA(PAPERS_JSON_PUBLIC_URL)
+            except Exception as e:
+                app.logger.error(f"Error loading diatoms data: {str(e)}")
+                return render_template('error.html', error="No diatom data available"), 404
+        
+        return send_file('templates/label-union.html', mimetype='text/html')
+        
+    except Exception as e:
+        app.logger.error(f"Error in label_union route: {str(e)}")
+        return render_template('error.html', error=str(e)), 500
+
+@app.route('/api/align_bbox_segmentation', methods=['POST'])
+def align_bbox_segmentation():
+    """Align bounding boxes with segmentations for a single image"""
+    try:
+        data = request.json
+        image_index = data.get('image_index', 0)
+        
+        if not 0 <= image_index < len(DIATOMS_DATA):
+            raise ValueError("Invalid image index")
+
+        current_image_data = DIATOMS_DATA[image_index]
+        
+        # Get segmentation data
+        if not current_image_data.get('segmentation_url'):
+            return jsonify({
+                'success': False,
+                'error': 'No segmentation data available'
+            }), 400
+            
+        segmentation_text = gcp_ops.load_segmentation_data(current_image_data['segmentation_url'])
+        if not segmentation_text:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to load segmentation data'
+            }), 400
+            
+        # Use SegmentationOps to align bboxes and segmentations
+        updated_image_data = segmentation_ops.align_bbox_segmentations(
+            current_image_data,
+            segmentation_text
+        )
+        
+        # Update DIATOMS_DATA
+        DIATOMS_DATA[image_index] = updated_image_data
+        
+        # Update paper JSON files
+        for paper in PAPER_JSON_FILES:
+            if isinstance(paper.get('diatoms_data'), str):
+                paper['diatoms_data'] = json.loads(paper['diatoms_data'])
+            
+            if paper['diatoms_data'].get('image_url') == current_image_data.get('image_url'):
+                paper['diatoms_data'] = updated_image_data
+                break
+        
+        # Save to GCP
+        success = ClaudeAI.update_and_save_papers(
+            PAPERS_JSON_PUBLIC_URL,
+            PAPER_JSON_FILES,
+            DIATOMS_DATA
+        )
+        
+        if not success:
+            raise Exception("Failed to save updates to GCP")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Alignment saved successfully',
+            'updated_data': updated_image_data
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error in align_bbox_segmentation: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/align_all_images', methods=['POST'])
+def align_all_images():
+    """Automatically align bounding boxes with segmentations for all images"""
+    try:
+        total_processed = 0
+        errors = []
+        
+        for index, image_data in enumerate(DIATOMS_DATA):
+            try:
+                if not image_data.get('segmentation_url'):
+                    continue
+                    
+                # Load segmentation data
+                segmentation_text = gcp_ops.load_segmentation_data(image_data['segmentation_url'])
+                if not segmentation_text:
+                    errors.append(f"Failed to load segmentation data for image {index}")
+                    continue
+                
+                # Align bboxes and segmentations
+                updated_image_data = segmentation_ops.align_bbox_segmentations(
+                    image_data,
+                    segmentation_text
+                )
+                
+                # Update DIATOMS_DATA
+                DIATOMS_DATA[index] = updated_image_data
+                
+                # Update paper JSON files
+                for paper in PAPER_JSON_FILES:
+                    if isinstance(paper.get('diatoms_data'), str):
+                        paper['diatoms_data'] = json.loads(paper['diatoms_data'])
+                    
+                    if paper['diatoms_data'].get('image_url') == image_data.get('image_url'):
+                        paper['diatoms_data'] = updated_image_data
+                        break
+                
+                total_processed += 1
+                
+            except Exception as e:
+                errors.append(f"Error processing image {index}: {str(e)}")
+                continue
+        
+        # Save all updates to GCP
+        success = ClaudeAI.update_and_save_papers(
+            PAPERS_JSON_PUBLIC_URL,
+            PAPER_JSON_FILES,
+            DIATOMS_DATA
+        )
+        
+        if not success:
+            raise Exception("Failed to save updates to GCP")
+        
+        return jsonify({
+            'success': True,
+            'total_processed': total_processed,
+            'errors': errors,
+            'message': f'Successfully processed {total_processed} images'
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error in align_all_images: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+# ----------------------------------------------------------------------------------------
 
 
 if __name__ == '__main__':
