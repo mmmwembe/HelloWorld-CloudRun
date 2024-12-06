@@ -216,31 +216,59 @@
                 const ctx = canvas.getContext('2d');
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-                // Draw bounding boxes
+                // Draw bounding boxes and their segmentations
                 bboxes.forEach((bbox, index) => {
-                    const [x, y, width, height] = bbox.bbox;
-                    ctx.strokeStyle = bbox.color;
-                    ctx.lineWidth = 2;
-                    ctx.strokeRect(x, y, width - x, height - y);
+                    // Get the bbox coordinates
+                    const [x1, y1, x2, y2] = bbox.bbox.split(',').map(Number);
+                    const color = bbox.color || getRandomColor();
 
-                    // Draw associated segmentations
-                    const relatedSegmentations = segmentations.filter(seg => seg.bbox_index === index);
-                    relatedSegmentations.forEach(seg => {
-                        if (seg.points) {
+                    // Draw segmentation only if it exists and isn't empty
+                    if (bbox.segmentation && bbox.segmentation.trim()) {
+                        const parts = bbox.segmentation.split(' ');
+                        const label = parts[0];
+                        const points = [];
+                        
+                        // Parse points
+                        for (let i = 1; i < parts.length; i += 2) {
+                            if (i + 1 < parts.length) {
+                                const x = parseFloat(parts[i]) * canvas.width;
+                                const y = parseFloat(parts[i + 1]) * canvas.height;
+                                points.push({x, y});
+                            }
+                        }
+                        
+                        if (points.length > 2) {
                             ctx.beginPath();
-                            ctx.moveTo(seg.points[0].x, seg.points[0].y);
-                            seg.points.forEach(point => {
-                                ctx.lineTo(point.x, point.y);
-                            });
+                            ctx.moveTo(points[0].x, points[0].y);
+                            
+                            for (let i = 1; i < points.length; i++) {
+                                ctx.lineTo(points[i].x, points[i].y);
+                            }
+                            
                             ctx.closePath();
-                            ctx.fillStyle = `${bbox.color}40`;
+                            ctx.fillStyle = `${color}40`;  // 40 is hex for 25% opacity
                             ctx.fill();
-                            ctx.strokeStyle = bbox.color;
+                            ctx.strokeStyle = color;
+                            ctx.lineWidth = 1;
                             ctx.stroke();
                         }
-                    });
+                    }
+
+                    // Draw the bounding box
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+
+                    // Add label text
+                    const label = bbox.label[0];
+                    ctx.font = '14px Arial';
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                    const textMetrics = ctx.measureText(label);
+                    ctx.fillRect(x1, y1 - 20, textMetrics.width + 4, 20);
+                    ctx.fillStyle = 'white';
+                    ctx.fillText(label, x1 + 2, y1 - 4);
                 });
-            }, [bboxes, segmentations]);
+            }, [bboxes]);
 
             useEffect(() => {
                 loadImageData(imageIndex);
