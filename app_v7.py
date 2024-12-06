@@ -437,72 +437,6 @@ def label():
     
     return render_template('label-react.html')
 
-@app.route('/api/diatoms', methods=['GET'])
-def get_diatoms():
-    try:
-        image_index = request.args.get('index', 0, type=int)
-        
-        global DIATOMS_DATA
-        
-        if not DIATOMS_DATA:
-            try:
-                DIATOMS_DATA = ClaudeAI.get_DIATOMS_DATA(PAPERS_JSON_PUBLIC_URL)
-                if not DIATOMS_DATA:
-                    return jsonify({
-                        'current_index': 0,
-                        'total_images': 0,
-                        'data': {},
-                        'error': 'No diatoms data available'
-                    })
-            except Exception as e:
-                logger.error(f"Error reloading diatoms data: {str(e)}")
-                return jsonify({
-                    'current_index': 0,
-                    'total_images': 0,
-                    'data': {},
-                    'error': 'Failed to load diatoms data'
-                })
-        
-        total_images = len(DIATOMS_DATA)
-        image_index = min(max(0, image_index), total_images - 1)
-        
-        try:
-            current_image_data = DIATOMS_DATA[image_index]
-            
-            # Ensure segmentation data is loaded and processed
-            if current_image_data.get('segmentation_url'):
-                segmentation_text = gcp_ops.load_segmentation_data(current_image_data['segmentation_url'])
-                if segmentation_text:
-                    # Process segmentations using existing SegmentationOps method
-                    current_image_data = segmentation_ops.process_image_segmentations(
-                        current_image_data,
-                        segmentation_text
-                    )
-            
-            return jsonify({
-                'current_index': image_index,
-                'total_images': total_images,
-                'data': current_image_data
-            })
-            
-        except IndexError:
-            logger.error(f"Failed to get data for index {image_index}")
-            return jsonify({
-                'current_index': 0,
-                'total_images': total_images,
-                'data': {},
-                'error': 'Invalid image index'
-            })
-        
-    except Exception as e:
-        logger.error(f"Error in get_diatoms: {str(e)}")
-        return jsonify({
-            'current_index': 0,
-            'total_images': 0,
-            'data': {},
-            'error': f'Error retrieving diatoms data: {str(e)}'
-        }), 500
-
 # @app.route('/api/diatoms', methods=['GET'])
 # def get_diatoms():
 #     try:
@@ -536,25 +470,19 @@ def get_diatoms():
 #         total_images = len(DIATOMS_DATA)
 #         image_index = min(max(0, image_index), total_images - 1)
         
+#         # Log the state
+#         app.logger.info(f"Getting diatom data for index {image_index} of {total_images}")
+        
 #         try:
 #             current_image_data = DIATOMS_DATA[image_index]
-            
-#             # Ensure segmentation data is loaded
-#             if current_image_data.get('segmentation_url') and current_image_data.get('segmentation_indices_array'):
-#                 segmentation_text = gcp_ops.load_segmentation_data(current_image_data['segmentation_url'])
-#                 if segmentation_text:
-#                     # Process segmentations to add denormalized points
-#                     current_image_data = segmentation_ops.process_image_segmentations(
-#                         current_image_data,
-#                         segmentation_text
-#                     )
+#             # Log the data being sent
+#             app.logger.info(f"Sending image data: {current_image_data.get('image_url', 'No URL')}")
             
 #             return jsonify({
 #                 'current_index': image_index,
 #                 'total_images': total_images,
 #                 'data': current_image_data
 #             })
-            
 #         except IndexError:
 #             app.logger.error(f"Failed to get data for index {image_index} from list of length {total_images}")
 #             return jsonify({
@@ -572,6 +500,76 @@ def get_diatoms():
 #             'data': {},
 #             'error': f'Error retrieving diatoms data: {str(e)}'
 #         }), 500
+
+@app.route('/api/diatoms', methods=['GET'])
+def get_diatoms():
+    try:
+        image_index = request.args.get('index', 0, type=int)
+        
+        # Use the global DIATOMS_DATA
+        global DIATOMS_DATA
+        
+        # Check if we have any data
+        if not DIATOMS_DATA:
+            try:
+                # Try to reload the data
+                DIATOMS_DATA = ClaudeAI.get_DIATOMS_DATA(PAPERS_JSON_PUBLIC_URL)
+                if not DIATOMS_DATA:
+                    return jsonify({
+                        'current_index': 0,
+                        'total_images': 0,
+                        'data': {},
+                        'error': 'No diatoms data available'
+                    })
+            except Exception as e:
+                app.logger.error(f"Error reloading diatoms data: {str(e)}")
+                return jsonify({
+                    'current_index': 0,
+                    'total_images': 0,
+                    'data': {},
+                    'error': 'Failed to load diatoms data'
+                })
+        
+        # Ensure index is within bounds
+        total_images = len(DIATOMS_DATA)
+        image_index = min(max(0, image_index), total_images - 1)
+        
+        try:
+            current_image_data = DIATOMS_DATA[image_index]
+            
+            # Ensure segmentation data is loaded
+            if current_image_data.get('segmentation_url') and current_image_data.get('segmentation_indices_array'):
+                segmentation_text = gcp_ops.load_segmentation_data(current_image_data['segmentation_url'])
+                if segmentation_text:
+                    # Process segmentations to add denormalized points
+                    current_image_data = segmentation_ops.process_image_segmentations(
+                        current_image_data,
+                        segmentation_text
+                    )
+            
+            return jsonify({
+                'current_index': image_index,
+                'total_images': total_images,
+                'data': current_image_data
+            })
+            
+        except IndexError:
+            app.logger.error(f"Failed to get data for index {image_index} from list of length {total_images}")
+            return jsonify({
+                'current_index': 0,
+                'total_images': total_images,
+                'data': {},
+                'error': 'Invalid image index'
+            })
+        
+    except Exception as e:
+        app.logger.error(f"Error in get_diatoms: {str(e)}")
+        return jsonify({
+            'current_index': 0,
+            'total_images': 0,
+            'data': {},
+            'error': f'Error retrieving diatoms data: {str(e)}'
+        }), 500
 
 @app.route('/api/save', methods=['POST'])
 def save():
@@ -1185,7 +1183,160 @@ def label_union():
     except Exception as e:
         app.logger.error(f"Error in label_union route: {str(e)}")
         return render_template('error.html', error=str(e)), 500
-      
+
+# @app.route('/api/align_bbox_segmentation', methods=['POST'])
+# def align_bbox_segmentation():
+#     """Align bounding boxes with segmentations for a single image"""
+#     try:
+#         data = request.json
+#         image_index = data.get('image_index', 0)
+        
+#         if not 0 <= image_index < len(DIATOMS_DATA):
+#             raise ValueError("Invalid image index")
+
+#         current_image_data = DIATOMS_DATA[image_index]
+        
+#         # Verify segmentation URL exists
+#         if not current_image_data.get('segmentation_url'):
+#             return jsonify({
+#                 'success': False,
+#                 'error': 'No segmentation data available'
+#             }), 400
+            
+#         # Load segmentation data
+#         segmentation_text = gcp_ops.load_segmentation_data(current_image_data['segmentation_url'])
+#         if not segmentation_text:
+#             return jsonify({
+#                 'success': False,
+#                 'error': 'Failed to load segmentation data'
+#             }), 400
+            
+#         # Process segmentations
+#         updated_image_data = segmentation_ops.process_image_segmentations(
+#             current_image_data,
+#             segmentation_text
+#         )
+        
+#         # Validate results
+#         if not updated_image_data.get('segmentation_indices_array'):
+#             return jsonify({
+#                 'success': False,
+#                 'error': 'Failed to process segmentations'
+#             }), 500
+        
+#         # Update DIATOMS_DATA
+#         DIATOMS_DATA[image_index] = updated_image_data
+        
+#         # Update paper JSON files
+#         updated_paper = False
+#         for paper in PAPER_JSON_FILES:
+#             if isinstance(paper.get('diatoms_data'), str):
+#                 paper['diatoms_data'] = json.loads(paper['diatoms_data'])
+            
+#             if paper['diatoms_data'].get('image_url') == current_image_data.get('image_url'):
+#                 paper['diatoms_data'] = updated_image_data
+#                 updated_paper = True
+#                 break
+        
+#         if not updated_paper:
+#             app.logger.warning(f"No matching paper found for image {image_index}")
+        
+#         # Save to GCP
+#         success = ClaudeAI.update_and_save_papers(
+#             PAPERS_JSON_PUBLIC_URL,
+#             PAPER_JSON_FILES,
+#             DIATOMS_DATA
+#         )
+        
+#         if not success:
+#             raise Exception("Failed to save updates to GCP")
+        
+#         return jsonify({
+#             'success': True,
+#             'message': 'Alignment saved successfully',
+#             'updated_data': updated_image_data
+#         })
+        
+#     except Exception as e:
+#         app.logger.error(f"Error in align_bbox_segmentation: {str(e)}")
+#         return jsonify({
+#             'success': False,
+#             'error': str(e)
+#         }), 500
+
+# @app.route('/api/align_bbox_segmentation', methods=['POST'])
+# def align_bbox_segmentation():
+#     """Align bounding boxes with segmentations for a single image"""
+#     try:
+#         data = request.json
+#         image_index = data.get('image_index', 0)
+        
+#         if not 0 <= image_index < len(DIATOMS_DATA):
+#             raise ValueError("Invalid image index")
+
+#         current_image_data = DIATOMS_DATA[image_index]
+        
+#         # Verify segmentation URL exists
+#         if not current_image_data.get('segmentation_url'):
+#             return jsonify({
+#                 'success': False,
+#                 'error': 'No segmentation data available'
+#             }), 400
+            
+#         # Load segmentation data
+#         segmentation_text = gcp_ops.load_segmentation_data(current_image_data['segmentation_url'])
+#         if not segmentation_text:
+#             return jsonify({
+#                 'success': False,
+#                 'error': 'Failed to load segmentation data'
+#             }), 400
+            
+#         # Process segmentations
+#         updated_image_data = segmentation_ops.process_image_segmentations(
+#             current_image_data,
+#             segmentation_text
+#         )
+        
+#         # Update DIATOMS_DATA
+#         DIATOMS_DATA[image_index] = updated_image_data
+        
+#         # Update paper JSON files
+#         updated_paper = False
+#         for paper in PAPER_JSON_FILES:
+#             if isinstance(paper.get('diatoms_data'), str):
+#                 paper['diatoms_data'] = json.loads(paper['diatoms_data'])
+            
+#             if paper['diatoms_data'].get('image_url') == current_image_data.get('image_url'):
+#                 paper['diatoms_data'] = updated_image_data
+#                 updated_paper = True
+#                 break
+        
+#         if not updated_paper:
+#             app.logger.warning(f"No matching paper found for image {image_index}")
+        
+#         # Save to GCP
+#         success = ClaudeAI.update_and_save_papers(
+#             PAPERS_JSON_PUBLIC_URL,
+#             PAPER_JSON_FILES,
+#             DIATOMS_DATA
+#         )
+        
+#         if not success:
+#             raise Exception("Failed to save updates to GCP")
+        
+#         return jsonify({
+#             'success': True,
+#             'message': 'Alignment saved successfully',
+#             'updated_data': updated_image_data
+#         })
+        
+#     except Exception as e:
+#         app.logger.error(f"Error in align_bbox_segmentation: {str(e)}")
+#         return jsonify({
+#             'success': False,
+#             'error': str(e)
+#         }), 500
+        
 @app.route('/api/align_bbox_segmentation', methods=['POST'])
 def align_bbox_segmentation():
     """Align bounding boxes with segmentations for a single image"""

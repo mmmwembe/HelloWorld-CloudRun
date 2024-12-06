@@ -53,10 +53,21 @@
             </div>
         );
 
-        // Combined Canvas Component for both segmentations and bounding boxes
-        const CombinedCanvas = ({ imageData, imageRef }) => {
+        // Main LabelUnion Component
+        const LabelUnion = () => {
+            const [imageIndex, setImageIndex] = useState(0);
+            const [totalImages, setTotalImages] = useState(0);
+            const [imageUrl, setImageUrl] = useState('');
+            const [imageData, setImageData] = useState(null);
+            const [showToast, setShowToast] = useState(false);
+            const [toastMessage, setToastMessage] = useState('');
+            const [toastType, setToastType] = useState('success');
+            const [isProcessing, setIsProcessing] = useState(false);
+            const [matchStats, setMatchStats] = useState({ total: 0, matched: 0 });
+            
             const canvasRef = useRef(null);
-            const [colorMap, setColorMap] = useState(new Map());
+            const imageRef = useRef(null);
+            const containerRef = useRef(null);
 
             const getRandomColor = () => {
                 const colors = ['#2ecc71', '#e74c3c', '#3498db', '#f1c40f', '#9b59b6', '#1abc9c'];
@@ -66,35 +77,41 @@
             const drawCanvas = useCallback(() => {
                 const canvas = canvasRef.current;
                 const ctx = canvas.getContext('2d');
+                
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
-
+                
                 if (!imageData?.info || !imageData?.segmentation_indices_array) return;
-
+                
                 // Create color map for bboxes
-                const newColorMap = new Map();
+                const colorMap = new Map();
                 imageData.info.forEach(bbox => {
-                    newColorMap.set(bbox.bbox, getRandomColor());
+                    colorMap.set(bbox.bbox, getRandomColor());
                 });
-                setColorMap(newColorMap);
 
-                // Draw segmentations first
+                // Draw segmentations using denormalized points
                 let matched = 0;
                 if (imageData.segmentation_indices_array) {
                     imageData.segmentation_indices_array.forEach(seg => {
                         if (seg.denormalized_segmentation_points) {
                             const points = seg.denormalized_segmentation_points.split(' ').map(Number);
-                            const color = seg.bbox ? newColorMap.get(seg.bbox) : '#999999';
-
+                            const color = seg.bbox ? colorMap.get(seg.bbox) : '#999999';
+                            
                             if (points.length >= 4) {
                                 ctx.beginPath();
+                                
                                 for (let i = 0; i < points.length; i += 2) {
                                     const x = points[i];
                                     const y = points[i + 1];
-                                    if (i === 0) ctx.moveTo(x, y);
-                                    else ctx.lineTo(x, y);
+                                    
+                                    if (i === 0) {
+                                        ctx.moveTo(x, y);
+                                    } else {
+                                        ctx.lineTo(x, y);
+                                    }
                                 }
+                                
                                 ctx.closePath();
-                                ctx.fillStyle = `${color}40`;
+                                ctx.fillStyle = `${color}40`; // 40 hex = 25% opacity
                                 ctx.fill();
                                 ctx.strokeStyle = color;
                                 ctx.lineWidth = 2;
@@ -104,12 +121,17 @@
                             }
                         }
                     });
+
+                    setMatchStats({
+                        total: imageData.segmentation_indices_array.length,
+                        matched: matched
+                    });
                 }
 
-                // Draw bounding boxes on top
+                // Draw bounding boxes
                 imageData.info.forEach(bbox => {
                     const [x1, y1, x2, y2] = bbox.bbox.split(',').map(Number);
-                    const color = newColorMap.get(bbox.bbox);
+                    const color = colorMap.get(bbox.bbox);
                     
                     ctx.strokeStyle = color;
                     ctx.lineWidth = 2;
@@ -124,41 +146,7 @@
                     ctx.fillStyle = 'white';
                     ctx.fillText(label, x1 + 2, y1 - 4);
                 });
-
-                return { total: imageData.segmentation_indices_array?.length || 0, matched };
             }, [imageData]);
-
-            useEffect(() => {
-                if (imageRef.current && imageRef.current.complete && imageData) {
-                    const canvas = canvasRef.current;
-                    canvas.width = imageRef.current.width;
-                    canvas.height = imageRef.current.height;
-                    drawCanvas();
-                }
-            }, [drawCanvas, imageData]);
-
-            return (
-                <canvas
-                    ref={canvasRef}
-                    className="absolute top-0 left-0 w-full h-full"
-                />
-            );
-        };
-    
-// Main LabelUnion Component
-const LabelUnion = () => {
-            const [imageIndex, setImageIndex] = useState(0);
-            const [totalImages, setTotalImages] = useState(0);
-            const [imageUrl, setImageUrl] = useState('');
-            const [imageData, setImageData] = useState(null);
-            const [showToast, setShowToast] = useState(false);
-            const [toastMessage, setToastMessage] = useState('');
-            const [toastType, setToastType] = useState('success');
-            const [isProcessing, setIsProcessing] = useState(false);
-            const [matchStats, setMatchStats] = useState({ total: 0, matched: 0 });
-            
-            const imageRef = useRef(null);
-            const containerRef = useRef(null);
 
             const loadImageData = useCallback(async (index) => {
                 try {
@@ -259,13 +247,27 @@ const LabelUnion = () => {
                 loadImageData(imageIndex);
             }, [imageIndex, loadImageData]);
 
-            const handleImageLoad = () => {
+            useEffect(() => {
                 if (imageRef.current && imageRef.current.complete && imageData) {
-                    setMatchStats({
-                        total: imageData.segmentation_indices_array?.length || 0,
-                        matched: imageData.segmentation_indices_array?.filter(seg => seg.bbox)?.length || 0
-                    });
+                    const canvas = canvasRef.current;
+                    canvas.width = imageRef.current.width;
+                    canvas.height = imageRef.current.height;
+                    
+                    // Update image dimensions in imageData
+                    if (imageData) {
+                        imageData.image_width = imageRef.current.width.toString();
+                        imageData.image_height = imageRef.current.height.toString();
+                    }
+                    
+                    drawCanvas();
                 }
+            }, [drawCanvas, imageUrl, imageData]);
+
+            const handleImageLoad = () => {
+                const canvas = canvasRef.current;
+                canvas.width = imageRef.current.width;
+                canvas.height = imageRef.current.height;
+                drawCanvas();
             };
 
             const handlePrevious = () => setImageIndex(prev => Math.max(0, prev - 1));
@@ -303,9 +305,9 @@ const LabelUnion = () => {
                                     className="w-full"
                                     onLoad={handleImageLoad}
                                 />
-                                <CombinedCanvas
-                                    imageData={imageData}
-                                    imageRef={imageRef}
+                                <canvas
+                                    ref={canvasRef}
+                                    className="absolute top-0 left-0 w-full h-full"
                                 />
                             </div>
 
@@ -343,8 +345,7 @@ const LabelUnion = () => {
                             {matchStats.total > 0 && (
                                 <SegmentationStats
                                     totalSegmentations={matchStats.total}
-                                    matchedSegmentations={matchStats.matched} 
-                                />
+                                    matchedSegmentations={matchStats.matched} />
                             )}
 
                             {imageData?.segmentation_indices_array && (
