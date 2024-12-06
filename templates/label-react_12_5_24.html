@@ -13,7 +13,7 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useCallback, useRef } = React;
+        const { useState, useEffect, useCallback } = React;
 
         function DiatomeSelector({ selected, setSelected }) {
             const options = [
@@ -46,9 +46,8 @@
                 </div>
             );
         }
-
         function Toast({ message, onClose, type = 'success' }) {
-            useEffect(() => {
+            React.useEffect(() => {
                 const timer = setTimeout(() => {
                     onClose();
                 }, 3000);
@@ -82,17 +81,15 @@
             const [toastType, setToastType] = useState('success');
             const [selectedType, setSelectedType] = useState(1);
             const [textData, setTextData] = useState(null);
-            const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
-            
-            const canvasRef = useRef(null);
-            const imageRef = useRef(null);
-            const containerRef = useRef(null);
-            const drawTimeoutRef = useRef(null);
-
+                    
+            const canvasRef = React.useRef(null);
+            const imageRef = React.useRef(null);
+            const containerRef = React.useRef(null);
             const getRandomColor = () => {
                 const colors = ['#2ecc71', '#e74c3c', '#3498db', '#f1c40f', '#9b59b6', '#1abc9c'];
                 return colors[Math.floor(Math.random() * colors.length)];
             };
+
             const loadImageData = useCallback(async (index) => {
                 try {
                     const response = await fetch(`/api/diatoms?index=${index}`);
@@ -130,66 +127,9 @@
                 }
             }, [selectedDiatom]);
 
-            const drawAllBoundingBoxes = useCallback(() => {
-                const canvas = canvasRef.current;
-                if (!canvas || !canvasSize.width || !canvasSize.height) return;
-
-                const ctx = canvas.getContext('2d');
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-                diatoms.forEach(diatom => {
-                    diatom.bboxes.forEach((box, boxIndex) => {
-                        const [x1, y1, x2, y2] = box.bbox.split(',').map(Number);
-                        ctx.strokeStyle = box.color;
-                        ctx.lineWidth = 3;
-                        ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
-                        ctx.font = '16px Arial';
-                        ctx.fillStyle = box.color;
-                        ctx.fillText(`${diatom.index}-${boxIndex + 1}`, x1 + 5, y1 + 20);
-                    });
-                });
-
-                if (currentBox) {
-                    ctx.strokeStyle = '#2ecc71';
-                    ctx.lineWidth = 3;
-                    ctx.strokeRect(currentBox.x, currentBox.y, currentBox.width, currentBox.height);
-                }
-            }, [diatoms, currentBox, canvasSize]);
-
-            useEffect(() => {
-                if (drawTimeoutRef.current) {
-                    clearTimeout(drawTimeoutRef.current);
-                }
-                drawTimeoutRef.current = setTimeout(drawAllBoundingBoxes, 50);
-                return () => {
-                    if (drawTimeoutRef.current) {
-                        clearTimeout(drawTimeoutRef.current);
-                    }
-                };
-            }, [drawAllBoundingBoxes]);
-
             useEffect(() => {
                 loadImageData(imageIndex);
             }, [imageIndex, loadImageData]);
-
-            const handleImageLoad = useCallback(() => {
-                const container = containerRef.current;
-                if (container) {
-                    setCanvasSize({
-                        width: container.offsetWidth,
-                        height: container.offsetHeight
-                    });
-                }
-            }, []);
-
-            useEffect(() => {
-                const canvas = canvasRef.current;
-                if (canvas && canvasSize.width && canvasSize.height) {
-                    canvas.width = canvasSize.width;
-                    canvas.height = canvasSize.height;
-                    drawAllBoundingBoxes();
-                }
-            }, [canvasSize, drawAllBoundingBoxes]);
 
             const handleSave = async () => {
                 setIsSaving(true);
@@ -210,9 +150,7 @@
                         })
                     });
                     
-                    if (!response.ok) throw new Error('Network response was not ok');
                     const data = await response.json();
-                    
                     if (data.success) {
                         setToastMessage('Labels saved successfully!');
                         setToastType('success');
@@ -252,46 +190,87 @@
                 }
             };
 
-            const handleMouseDown = (e) => {
-                if (!selectedDiatom) {
-                    setToastMessage('Please select a label from the right sidebar before drawing boxes');
-                    setToastType('warning');
-                    setShowToast(true);
-                    return;
+            const drawAllBoundingBoxes = useCallback(() => {
+                const canvas = canvasRef.current;
+                if (!canvas) return;
+
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                diatoms.forEach(diatom => {
+                    diatom.bboxes.forEach((box, boxIndex) => {
+                        const [x1, y1, x2, y2] = box.bbox.split(',').map(Number);
+                        ctx.strokeStyle = box.color;
+                        ctx.lineWidth = 3;
+                        ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+                        ctx.font = '16px Arial';
+                        ctx.fillStyle = box.color;
+                        ctx.fillText(`${diatom.index}-${boxIndex + 1}`, x1 + 5, y1 + 20);
+                    });
+                });
+
+                if (currentBox) {
+                    ctx.strokeStyle = '#2ecc71';
+                    ctx.lineWidth = 3;
+                    ctx.strokeRect(currentBox.x, currentBox.y, currentBox.width, currentBox.height);
                 }
-                
-                const rect = canvasRef.current.getBoundingClientRect();
-                setIsDrawing(true);
-                setStartPoint({ 
-                    x: e.clientX - rect.left,
-                    y: e.clientY - rect.top
-                });
-            };
+            }, [diatoms, currentBox]);
+            useEffect(() => {
+               drawAllBoundingBoxes();
+           }, [drawAllBoundingBoxes]);
 
-            const handleMouseMove = (e) => {
-                if (!isDrawing) return;
-                
-                const rect = canvasRef.current.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const y = e.clientY - rect.top;
-                
-                setCurrentBox({
-                    x: Math.min(x, startPoint.x),
-                    y: Math.min(y, startPoint.y),
-                    width: Math.abs(x - startPoint.x),
-                    height: Math.abs(y - startPoint.y)
-                });
-            };
+           const handleImageLoad = useCallback(() => {
+               const canvas = canvasRef.current;
+               const container = containerRef.current;
+               if (canvas && container) {
+                   canvas.width = container.offsetWidth;
+                   canvas.height = container.offsetHeight;
+                   drawAllBoundingBoxes();
+               }
+           }, [drawAllBoundingBoxes]);
 
-            const generateYoloBbox = useCallback((type, x1, y1, x2, y2, imageWidth, imageHeight) => {
-                const x_center = (x1 + x2) / (2 * imageWidth);
-                const y_center = (y1 + y2) / (2 * imageHeight);
-                const width = (x2 - x1) / imageWidth;
-                const height = (y2 - y1) / imageHeight;
-                return `${type} ${x_center.toFixed(6)} ${y_center.toFixed(6)} ${width.toFixed(6)} ${height.toFixed(6)}`;
-            }, []);
+           const handlePrevious = () => setImageIndex(prev => Math.max(0, prev - 1));
+           const handleNext = () => setImageIndex(prev => Math.min(totalImages - 1, prev + 1));
 
-            const handleMouseUp = async () => {
+           const generateYoloBbox = useCallback((type, x1, y1, x2, y2, imageWidth, imageHeight) => {
+               const x_center = (x1 + x2) / (2 * imageWidth);
+               const y_center = (y1 + y2) / (2 * imageHeight);
+               const width = (x2 - x1) / imageWidth;
+               const height = (y2 - y1) / imageHeight;
+               return `${type} ${x_center.toFixed(6)} ${y_center.toFixed(6)} ${width.toFixed(6)} ${height.toFixed(6)}`;
+           }, []);
+
+           const handleMouseDown = (e) => {
+               if (!selectedDiatom) {
+                   setToastMessage('Please select a label from the right sidebar before drawing boxes');
+                   setToastType('warning');
+                   setShowToast(true);
+                   return;
+               }
+               
+               const rect = canvasRef.current.getBoundingClientRect();
+               setIsDrawing(true);
+               setStartPoint({ 
+                   x: e.clientX - rect.left,
+                   y: e.clientY - rect.top
+               });
+           };
+
+           const handleMouseMove = (e) => {
+               if (!isDrawing) return;
+               
+               const rect = canvasRef.current.getBoundingClientRect();
+               const x = e.clientX - rect.left;
+               const y = e.clientY - rect.top;
+               
+               setCurrentBox({
+                   x: Math.min(x, startPoint.x),
+                   y: Math.min(y, startPoint.y),
+                   width: Math.abs(x - startPoint.x),
+                   height: Math.abs(y - startPoint.y)
+               });
+           };
+           const handleMouseUp = async () => {
                 if (!isDrawing || !selectedDiatom) return;
                 
                 setIsDrawing(false);
@@ -330,6 +309,7 @@
                 const rect = canvasRef.current.getBoundingClientRect();
                 const x = e.clientX - rect.left;
                 const y = e.clientY - rect.top;
+
                 const clickedDiatom = diatoms.find(diatom => 
                     diatom.bboxes.some(box => {
                         const [x1, y1, x2, y2] = box.bbox.split(',').map(Number);
@@ -364,9 +344,6 @@
                     await handleSave();
                 }
             };
-
-            const handlePrevious = () => setImageIndex(prev => Math.max(0, prev - 1));
-            const handleNext = () => setImageIndex(prev => Math.min(totalImages - 1, prev + 1));
 
             return (
                 <div className="flex h-screen bg-gray-200">
@@ -559,4 +536,4 @@
         root.render(<DiatomLabeler />);
     </script>
 </body>
-</html>                
+</html>
