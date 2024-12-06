@@ -1094,6 +1094,7 @@ def get_diatom_list_assistant():
 
 #--------------------------------------------Label Union ------------------------------------------------
 
+# Add these routes to your app.py
 @app.route('/label_union')
 def label_union():
     """Route for the label union interface"""
@@ -1125,13 +1126,14 @@ def align_bbox_segmentation():
 
         current_image_data = DIATOMS_DATA[image_index]
         
-        # Get segmentation data
+        # Verify segmentation URL exists
         if not current_image_data.get('segmentation_url'):
             return jsonify({
                 'success': False,
                 'error': 'No segmentation data available'
             }), 400
             
+        # Load segmentation data
         segmentation_text = gcp_ops.load_segmentation_data(current_image_data['segmentation_url'])
         if not segmentation_text:
             return jsonify({
@@ -1139,23 +1141,35 @@ def align_bbox_segmentation():
                 'error': 'Failed to load segmentation data'
             }), 400
             
-        # Use SegmentationOps to align bboxes and segmentations
-        updated_image_data = segmentation_ops.align_bbox_segmentations(
+        # Process segmentations
+        updated_image_data = segmentation_ops.process_image_segmentations(
             current_image_data,
             segmentation_text
         )
+        
+        # Validate results
+        if not updated_image_data.get('segmentation_indices_array'):
+            return jsonify({
+                'success': False,
+                'error': 'Failed to process segmentations'
+            }), 500
         
         # Update DIATOMS_DATA
         DIATOMS_DATA[image_index] = updated_image_data
         
         # Update paper JSON files
+        updated_paper = False
         for paper in PAPER_JSON_FILES:
             if isinstance(paper.get('diatoms_data'), str):
                 paper['diatoms_data'] = json.loads(paper['diatoms_data'])
             
             if paper['diatoms_data'].get('image_url') == current_image_data.get('image_url'):
                 paper['diatoms_data'] = updated_image_data
+                updated_paper = True
                 break
+        
+        if not updated_paper:
+            app.logger.warning(f"No matching paper found for image {image_index}")
         
         # Save to GCP
         success = ClaudeAI.update_and_save_papers(
@@ -1186,9 +1200,11 @@ def align_all_images():
     try:
         total_processed = 0
         errors = []
+        processed_indices = []
         
         for index, image_data in enumerate(DIATOMS_DATA):
             try:
+                # Skip images without segmentation data
                 if not image_data.get('segmentation_url'):
                     continue
                     
@@ -1198,16 +1214,20 @@ def align_all_images():
                     errors.append(f"Failed to load segmentation data for image {index}")
                     continue
                 
-                # Align bboxes and segmentations
-                updated_image_data = segmentation_ops.align_bbox_segmentations(
+                # Process segmentations
+                updated_image_data = segmentation_ops.process_image_segmentations(
                     image_data,
                     segmentation_text
                 )
                 
+                if not updated_image_data.get('segmentation_indices_array'):
+                    errors.append(f"Failed to process segmentations for image {index}")
+                    continue
+                
                 # Update DIATOMS_DATA
                 DIATOMS_DATA[index] = updated_image_data
                 
-                # Update paper JSON files
+                # Update corresponding paper
                 for paper in PAPER_JSON_FILES:
                     if isinstance(paper.get('diatoms_data'), str):
                         paper['diatoms_data'] = json.loads(paper['diatoms_data'])
@@ -1217,24 +1237,27 @@ def align_all_images():
                         break
                 
                 total_processed += 1
+                processed_indices.append(index)
                 
             except Exception as e:
                 errors.append(f"Error processing image {index}: {str(e)}")
                 continue
         
         # Save all updates to GCP
-        success = ClaudeAI.update_and_save_papers(
-            PAPERS_JSON_PUBLIC_URL,
-            PAPER_JSON_FILES,
-            DIATOMS_DATA
-        )
-        
-        if not success:
-            raise Exception("Failed to save updates to GCP")
+        if total_processed > 0:
+            success = ClaudeAI.update_and_save_papers(
+                PAPERS_JSON_PUBLIC_URL,
+                PAPER_JSON_FILES,
+                DIATOMS_DATA
+            )
+            
+            if not success:
+                raise Exception("Failed to save updates to GCP")
         
         return jsonify({
             'success': True,
             'total_processed': total_processed,
+            'processed_indices': processed_indices,
             'errors': errors,
             'message': f'Successfully processed {total_processed} images'
         })

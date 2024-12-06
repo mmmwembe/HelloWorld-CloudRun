@@ -92,13 +92,13 @@
             const [imageIndex, setImageIndex] = useState(0);
             const [totalImages, setTotalImages] = useState(0);
             const [imageUrl, setImageUrl] = useState('');
-            const [bboxes, setBboxes] = useState([]);
-            const [segmentations, setSegmentations] = useState([]);
+            const [imageData, setImageData] = useState(null);
             const [showToast, setShowToast] = useState(false);
             const [toastMessage, setToastMessage] = useState('');
             const [toastType, setToastType] = useState('success');
             const [isProcessing, setIsProcessing] = useState(false);
-            
+            const [segmentationData, setSegmentationData] = useState([]);
+                    
             const canvasRef = useRef(null);
             const imageRef = useRef(null);
             const containerRef = useRef(null);
@@ -107,6 +107,69 @@
                 const colors = ['#2ecc71', '#e74c3c', '#3498db', '#f1c40f', '#9b59b6', '#1abc9c'];
                 return colors[Math.floor(Math.random() * colors.length)];
             };
+
+            const drawCanvas = useCallback(() => {
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+                const image = imageRef.current;
+                
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                if (!imageData?.info || !imageData?.segmentation_indices_array) return;
+                
+                // Create color map for bboxes
+                const colorMap = new Map();
+                imageData.info.forEach(bbox => {
+                    colorMap.set(bbox.bbox, getRandomColor());
+                });
+
+                // Draw segmentations from segmentation_indices_array
+                imageData.segmentation_indices_array.forEach(seg => {
+                    if (seg.segmentation_points && seg.bbox) {
+                        const color = colorMap.get(seg.bbox);
+                        const points = seg.segmentation_points.split(' ');
+                        
+                        if (points.length >= 4) {  // Need at least 2 points (4 coordinates)
+                            ctx.beginPath();
+                            
+                            // Draw polygon from normalized points
+                            for (let i = 0; i < points.length; i += 2) {
+                                const x = parseFloat(points[i]) * canvas.width;
+                                const y = parseFloat(points[i + 1]) * canvas.height;
+                                
+                                if (i === 0) {
+                                    ctx.moveTo(x, y);
+                                } else {
+                                    ctx.lineTo(x, y);
+                                }
+                            }
+                            
+                            ctx.closePath();
+                            ctx.fillStyle = `${color}40`;  // 40 is hex for 25% opacity
+                            ctx.fill();
+                        }
+                    }
+                });
+
+                // Draw bounding boxes
+                imageData.info.forEach(bbox => {
+                    const [x1, y1, x2, y2] = bbox.bbox.split(',').map(Number);
+                    const color = colorMap.get(bbox.bbox);
+                    
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+                    
+                    // Add label
+                    const label = bbox.label[0];
+                    ctx.font = '14px Arial';
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                    const textMetrics = ctx.measureText(label);
+                    ctx.fillRect(x1, y1 - 20, textMetrics.width + 4, 20);
+                    ctx.fillStyle = 'white';
+                    ctx.fillText(label, x1 + 2, y1 - 4);
+                });
+            }, [imageData]);
 
             const loadImageData = useCallback(async (index) => {
                 try {
@@ -120,29 +183,9 @@
                     }
 
                     setImageUrl(data.data.image_url);
+                    setImageData(data.data);
                     setTotalImages(data.total_images);
                     setImageIndex(data.current_index);
-
-                    // Process bounding boxes
-                    const processedBboxes = data.data.info.map((item, index) => ({
-                        ...item,
-                        color: getRandomColor(),
-                        bbox: item.bbox.split(',').map(Number)
-                    }));
-                    setBboxes(processedBboxes);
-
-                    // Load segmentations if available
-                    if (data.data.segmentation_url) {
-                        const segResponse = await fetch(
-                            `/api/get_segmentation?url=${encodeURIComponent(data.data.segmentation_url)}&image_index=${index}`
-                        );
-                        if (segResponse.ok) {
-                            const segData = await segResponse.json();
-                            setSegmentations(segData.segmentation_indices_array || []);
-                        }
-                    } else {
-                        setSegmentations([]);
-                    }
 
                 } catch (error) {
                     console.error('Error loading image data:', error);
@@ -161,9 +204,7 @@
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({
-                            image_index: imageIndex,
-                            bboxes,
-                            segmentations
+                            image_index: imageIndex
                         })
                     });
 
@@ -176,6 +217,7 @@
                         throw new Error(data.error || 'Failed to align and save');
                     }
                 } catch (error) {
+                    console.error('Alignment error:', error);
                     setToastMessage('Error during alignment');
                     setToastType('warning');
                 } finally {
@@ -185,24 +227,25 @@
             };
 
             const handleAutoAlignAll = async () => {
-                setIsProcessing(true);
-                setToastMessage('Starting automatic alignment of all images...');
-                setToastType('success');
-                setShowToast(true);
-
                 try {
+                    setIsProcessing(true);
+                    setToastMessage('Starting automatic alignment of all images...');
+                    setToastType('success');
+                    setShowToast(true);
+
                     const response = await fetch('/api/align_all_images', {
                         method: 'POST'
                     });
 
                     const data = await response.json();
                     if (data.success) {
-                        setToastMessage('All images aligned successfully!');
+                        setToastMessage(`Successfully processed ${data.total_processed} images!`);
                         await loadImageData(imageIndex);
                     } else {
                         throw new Error(data.error || 'Failed to align all images');
                     }
                 } catch (error) {
+                    console.error('Error:', error);
                     setToastMessage('Error during automatic alignment');
                     setToastType('warning');
                 } finally {
@@ -210,65 +253,6 @@
                     setIsProcessing(false);
                 }
             };
-
-            const drawCanvas = useCallback(() => {
-                const canvas = canvasRef.current;
-                const ctx = canvas.getContext('2d');
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-                // Draw bounding boxes and their segmentations
-                bboxes.forEach((bbox, index) => {
-                    // Get the bbox coordinates
-                    const [x1, y1, x2, y2] = bbox.bbox.split(',').map(Number);
-                    const color = bbox.color || getRandomColor();
-
-                    // Draw segmentation only if it exists and isn't empty
-                    if (bbox.segmentation && bbox.segmentation.trim()) {
-                        const parts = bbox.segmentation.split(' ');
-                        const label = parts[0];
-                        const points = [];
-                        
-                        // Parse points
-                        for (let i = 1; i < parts.length; i += 2) {
-                            if (i + 1 < parts.length) {
-                                const x = parseFloat(parts[i]) * canvas.width;
-                                const y = parseFloat(parts[i + 1]) * canvas.height;
-                                points.push({x, y});
-                            }
-                        }
-                        
-                        if (points.length > 2) {
-                            ctx.beginPath();
-                            ctx.moveTo(points[0].x, points[0].y);
-                            
-                            for (let i = 1; i < points.length; i++) {
-                                ctx.lineTo(points[i].x, points[i].y);
-                            }
-                            
-                            ctx.closePath();
-                            ctx.fillStyle = `${color}40`;  // 40 is hex for 25% opacity
-                            ctx.fill();
-                            ctx.strokeStyle = color;
-                            ctx.lineWidth = 1;
-                            ctx.stroke();
-                        }
-                    }
-
-                    // Draw the bounding box
-                    ctx.strokeStyle = color;
-                    ctx.lineWidth = 2;
-                    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
-
-                    // Add label text
-                    const label = bbox.label[0];
-                    ctx.font = '14px Arial';
-                    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-                    const textMetrics = ctx.measureText(label);
-                    ctx.fillRect(x1, y1 - 20, textMetrics.width + 4, 20);
-                    ctx.fillStyle = 'white';
-                    ctx.fillText(label, x1 + 2, y1 - 4);
-                });
-            }, [bboxes]);
 
             useEffect(() => {
                 loadImageData(imageIndex);
@@ -295,151 +279,122 @@
             const handlePrevious = () => setImageIndex(prev => Math.max(0, prev - 1));
             const handleNext = () => setImageIndex(prev => Math.min(totalImages - 1, prev + 1));
 
-            return (
-                <div className="flex h-screen bg-gray-200">
-                    <div className="w-64 bg-gray-800 fixed h-full">
-                        <img 
-                            src="/static/diatomhub-images/logo/diatom_hub_5e.svg" 
-                            alt="DiatomHub Logo" 
-                            className="w-4/5 mx-auto mt-5"
-                        />
-                        <div className="flex flex-col gap-3 px-4 mt-6">
-                            {/* Navigation Links */}
-                            <a href="/modules" className="px-4 py-3 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors duration-200">
-                                View Installed Modules
-                            </a>
-                            <a href="/all_papers" className="px-4 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-md hover:bg-white/10 transition-colors duration-200">
-                                View Papers
-                            </a>
-                            <a href="/view_uploaded_pdfs" className="px-4 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-md hover:bg-white/10 transition-colors duration-200">
-                                View Uploaded PDFs
-                            </a>
-                            <a href="/diatoms_data" className="px-4 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-md hover:bg-white/10 transition-colors duration-200">
-                                View Diatoms Data
-                            </a>
-                            <a href="/segmentation" className="px-4 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-md hover:bg-white/10 transition-colors duration-200">
-                                Label Segmentations
-                            </a>
-                            <a href="/label" className="px-4 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-md hover:bg-white/10 transition-colors duration-200">
-                                Label Bounding Boxes
-                            </a>
-                        </div>
-                    </div>
-
-                    <div className="flex-1 ml-64 mr-96">
-                        <div className="flex flex-col items-center justify-center min-h-screen p-5">
-                            <div className="text-4xl font-bold mb-4 text-gray-800">
-                                Diatom Label Union
-                            </div>
-
-                            <div ref={containerRef} className="relative w-full max-w-4xl mt-4">
-                                <img
-                                    ref={imageRef}
-                                    src={imageUrl}
-                                    alt="Diatom"
-                                    className="w-full"
-                                    onLoad={handleImageLoad}
+            return (                      
+                    <div className="flex h-screen bg-gray-200">
+                            <div className="w-64 bg-gray-800 fixed h-full">
+                                <img 
+                                    src="/static/diatomhub-images/logo/diatom_hub_5e.svg" 
+                                    alt="DiatomHub Logo" 
+                                    className="w-4/5 mx-auto mt-5"
                                 />
-                                <canvas
-                                    ref={canvasRef}
-                                    className="absolute top-0 left-0 w-full h-full"
+                                <div className="flex flex-col gap-3 px-4 mt-6">
+                                    <a href="/modules" className="px-4 py-3 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors duration-200">
+                                        View Installed Modules
+                                    </a>
+                                    <a href="/all_papers" className="px-4 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-md hover:bg-white/10 transition-colors duration-200">
+                                        View Papers
+                                    </a>
+                                    <a href="/view_uploaded_pdfs" className="px-4 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-md hover:bg-white/10 transition-colors duration-200">
+                                        View Uploaded PDFs
+                                    </a>
+                                    <a href="/diatoms_data" className="px-4 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-md hover:bg-white/10 transition-colors duration-200">
+                                        View Diatoms Data
+                                    </a>
+                                    <a href="/segmentation" className="px-4 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-md hover:bg-white/10 transition-colors duration-200">
+                                        Label Segmentations
+                                    </a>
+                                    <a href="/label" className="px-4 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-md hover:bg-white/10 transition-colors duration-200">
+                                        Label Bounding Boxes
+                                    </a>
+                                </div>
+                            </div>
+
+                            <div className="flex-1 ml-64">
+                                <div className="flex flex-col items-center justify-center min-h-screen p-5">
+                                    <div className="text-4xl font-bold mb-4 text-gray-800">
+                                        Diatom Label Union
+                                    </div>
+
+                                    <div ref={containerRef} className="relative w-full max-w-4xl mt-4">
+                                        <img
+                                            ref={imageRef}
+                                            src={imageUrl}
+                                            alt="Diatom"
+                                            className="w-full"
+                                            onLoad={handleImageLoad}
+                                        />
+                                        <canvas
+                                            ref={canvasRef}
+                                            className="absolute top-0 left-0 w-full h-full"
+                                        />
+                                    </div>
+
+                                    <div className="flex justify-center space-x-4 mt-6">
+                                        <button 
+                                            onClick={handlePrevious}
+                                            disabled={imageIndex === 0}
+                                            className="bg-yellow-400 text-black px-8 py-3 rounded-lg font-bold disabled:opacity-50 transform transition-all duration-200 hover:scale-105 hover:bg-yellow-300"
+                                        >
+                                            Previous
+                                        </button>
+                                        <button 
+                                            onClick={handleAlignment}
+                                            disabled={isProcessing}
+                                            className="bg-blue-600 text-white px-8 py-3 rounded-lg font-bold disabled:opacity-50 transform transition-all duration-200 hover:scale-105 hover:bg-blue-500"
+                                        >
+                                            Align Current Image
+                                        </button>
+                                        <button 
+                                            onClick={handleAutoAlignAll}
+                                            disabled={isProcessing}
+                                            className="bg-green-600 text-white px-8 py-3 rounded-lg font-bold disabled:opacity-50 transform transition-all duration-200 hover:scale-105 hover:bg-green-500"
+                                        >
+                                            Automatically Align All Images
+                                        </button>
+                                        <button 
+                                            onClick={handleNext}
+                                            disabled={imageIndex === totalImages - 1}
+                                            className="bg-yellow-400 text-black px-8 py-3 rounded-lg font-bold disabled:opacity-50 transform transition-all duration-200 hover:scale-105 hover:bg-yellow-300"
+                                        >
+                                            Next
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {showToast && (
+                                <Toast 
+                                    message={toastMessage}
+                                    type={toastType}
+                                    onClose={() => setShowToast(false)} 
                                 />
-                            </div>
-
-                            <div className="flex justify-center space-x-4 mt-6">
-                                <button 
-                                    onClick={handlePrevious}
-                                    disabled={imageIndex === 0}
-                                    className="bg-yellow-400 text-black px-8 py-3 rounded-lg font-bold disabled:opacity-50"
-                                >
-                                    Previous
-                                </button>
-                                <button 
-                                    onClick={handleAlignment}
-                                    disabled={isProcessing}
-                                    className="bg-blue-600 text-white px-8 py-3 rounded-lg font-bold disabled:opacity-50"
-                                >
-                                    Align Current Image
-                                </button>
-                                <button 
-                                    onClick={handleAutoAlignAll}
-                                    disabled={isProcessing}
-                                    className="bg-green-600 text-white px-8 py-3 rounded-lg font-bold disabled:opacity-50"
-                                >
-                                    Automatically Align All Images
-                                </button>
-                                <button 
-                                    onClick={handleNext}
-                                    disabled={imageIndex === totalImages - 1}
-                                    className="bg-yellow-400 text-black px-8 py-3 rounded-lg font-bold disabled:opacity-50"
-                                >
-                                    Next
-                                </button>
-                            </div>
+                            )}
                         </div>
-                    </div>
+                    );
+                }
 
-                    <div className="w-96 bg-gray-800 fixed right-0 h-full overflow-y-auto custom-scrollbar">
-                        <div className="text-2xl font-bold text-white text-center py-5 border-b border-gray-700">
-                            Labels & Segmentations
-                        </div>
-                        <div className="p-4">
-                            <SegmentationList 
-                                bboxes={bboxes}
-                                segmentations={segmentations}
-                            />
-                        </div>
-                    </div>
-
-                    {showToast && (
-                        <Toast 
-                            message={toastMessage}
-                            type={toastType}
-                            onClose={() => setShowToast(false)} 
-                        />
-                    )}
-                </div>
-            );
+// Add CSS animation styles
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes slide-up {
+        from {
+            transform: translateY(100%);
+            opacity: 0;
         }
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+    .animate-slide-up {
+        animation: slide-up 0.3s ease-out;
+    }
+`;
+document.head.appendChild(style);
 
-        // Add CSS animation styles
-        const style = document.createElement('style');
-        style.textContent = `
-            @keyframes slide-up {
-                from {
-                    transform: translateY(100%);
-                    opacity: 0;
-                }
-                to {
-                    transform: translateY(0);
-                    opacity: 1;
-                }
-            }
-            .animate-slide-up {
-                animation: slide-up 0.3s ease-out;
-            }
-            circle {
-                transition: stroke-dashoffset 0.3s ease;
-            }
-            .custom-scrollbar::-webkit-scrollbar {
-                width: 8px;
-            }
-            .custom-scrollbar::-webkit-scrollbar-track {
-                background: #1f2937;
-            }
-            .custom-scrollbar::-webkit-scrollbar-thumb {
-                background: #4b5563;
-                border-radius: 4px;
-            }
-            .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-                background: #6b7280;
-            }
-        `;
-        document.head.appendChild(style);
-
-        // Render the application
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<LabelUnion />);
+// Render the application
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<LabelUnion />);
     </script>
 </body>
 </html>

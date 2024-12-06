@@ -1,220 +1,217 @@
 import logging
-import json
-from typing import List, Dict, Optional, Union, Any
+from typing import List, Dict, Any, Optional, Tuple
 import numpy as np
 
 class SegmentationOps:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
 
-    def parse_segmentation_points(self, segmentation_text: str, image_width: float, image_height: float) -> List[Dict[str, Any]]:
+    def normalize_coordinates(self, x: float, y: float, image_width: float, image_height: float) -> Tuple[float, float]:
         """
-        Parse segmentation text into point arrays.
-        
-        Args:
-            segmentation_text (str): Raw segmentation text data
-            image_width (float): Width of the image
-            image_height (float): Height of the image
-            
-        Returns:
-            List[Dict]: List of parsed segmentation points with labels
+        Convert actual coordinates to normalized (0-1) range.
         """
         try:
-            points = []
-            if not segmentation_text.strip():
-                return points
-                
-            lines = segmentation_text.strip().split('\n')
-            for line in lines:
-                parts = line.split(' ')
-                if len(parts) < 3:  # Need at least label and one point
-                    continue
-                    
-                label = int(parts[0])
-                coords = []
-                for i in range(1, len(parts), 2):
-                    if i + 1 < len(parts):
-                        x = float(parts[i]) * image_width
-                        y = float(parts[i + 1]) * image_height
-                        coords.append({'x': x, 'y': y})
-                
-                if coords:
-                    points.append({
-                        'label': label,
-                        'points': coords
-                    })
-                    
-            return points
+            norm_x = x / image_width
+            norm_y = y / image_height
+            return (norm_x, norm_y)
         except Exception as e:
-            self.logger.error(f"Error parsing segmentation points: {str(e)}")
+            self.logger.error(f"Error normalizing coordinates: {str(e)}")
+            return (0.0, 0.0)
+
+    def denormalize_coordinates(self, norm_x: float, norm_y: float, image_width: float, image_height: float) -> Tuple[float, float]:
+        """
+        Convert normalized coordinates to actual image coordinates.
+        """
+        try:
+            x = norm_x * image_width
+            y = norm_y * image_height
+            return (x, y)
+        except Exception as e:
+            self.logger.error(f"Error denormalizing coordinates: {str(e)}")
+            return (0.0, 0.0)
+
+    def parse_segmentation_line(self, line: str) -> Tuple[int, str]:
+        """
+        Parse segmentation line into label and points string.
+        """
+        try:
+            parts = line.strip().split(' ')
+            if len(parts) < 3:
+                return (None, "")
+            
+            label = int(parts[0])
+            points_string = ' '.join(parts[1:])
+            return (label, points_string)
+        except Exception as e:
+            self.logger.error(f"Error parsing segmentation line: {str(e)}")
+            return (None, "")
+
+    def parse_segmentation_file(self, file_content: str) -> List[Dict[str, Any]]:
+        """
+        Parse entire segmentation file into structured data.
+        """
+        try:
+            segmentations = []
+            lines = file_content.strip().split('\n')
+            
+            for idx, line in enumerate(lines):
+                label, points_string = self.parse_segmentation_line(line)
+                if label is not None:
+                    segmentations.append({
+                        'index': idx,
+                        'label': label,
+                        'points_string': points_string,
+                        'points_count': len(points_string.split()) // 2
+                    })
+            
+            return segmentations
+        except Exception as e:
+            self.logger.error(f"Error parsing segmentation file: {str(e)}")
             return []
 
-    def find_matching_bbox(self, segmentation_points: List[Dict[str, float]], bboxes: List[Dict[str, Any]], overlap_threshold: float = 0.5) -> Optional[int]:
+    def calculate_bbox_overlap(self, points: List[str], bbox: str, image_width: float, image_height: float) -> float:
         """
-        Find which bbox a segmentation belongs to based on point overlap.
-        
-        Args:
-            segmentation_points (List[Dict]): List of segmentation points
-            bboxes (List[Dict]): List of bounding boxes
-            overlap_threshold (float): Minimum overlap ratio required (default: 0.5)
-            
-        Returns:
-            Optional[int]: Index of matching bbox or None if no match found
+        Calculate percentage of points that fall within bbox.
         """
         try:
-            if not segmentation_points or not bboxes:
-                return None
-                
-            max_overlap = 0
-            matching_bbox_index = None
+            if not points or not bbox:
+                return 0.0
+
+            bbox_coords = [float(x) for x in bbox.split(',')]
+            x1, y1, x2, y2 = bbox_coords
             
-            for bbox_index, bbox in enumerate(bboxes):
-                bbox_coords = [float(x) for x in bbox['bbox'].split(',')]
-                x1, y1, x2, y2 = bbox_coords
+            points_inside = 0
+            total_points = len(points) // 2
+            
+            for i in range(0, len(points), 2):
+                norm_x = float(points[i])
+                norm_y = float(points[i + 1])
+                x, y = self.denormalize_coordinates(norm_x, norm_y, image_width, image_height)
                 
-                # Count points inside this bbox
-                points_inside = sum(1 for point in segmentation_points 
-                                  if x1 <= point['x'] <= x2 and y1 <= point['y'] <= y2)
-                                  
-                overlap_ratio = points_inside / len(segmentation_points)
+                if x1 <= x <= x2 and y1 <= y <= y2:
+                    points_inside += 1
+            
+            return points_inside / total_points if total_points > 0 else 0.0
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating bbox overlap: {str(e)}")
+            return 0.0
+
+    def validate_segmentation_data(self, data: Dict[str, Any]) -> bool:
+        """
+        Validate segmentation data structure.
+        """
+        try:
+            required_fields = ['segmentation_points', 'label', 'index']
+            if not all(field in data for field in required_fields):
+                return False
+            
+            points = data['segmentation_points'].split()
+            if len(points) < 4 or len(points) % 2 != 0:  # Need at least 2 points
+                return False
                 
-                if overlap_ratio > max_overlap:
-                    max_overlap = overlap_ratio
-                    matching_bbox_index = bbox_index
-                    
-            return matching_bbox_index if max_overlap >= overlap_threshold else None
+            try:
+                [float(p) for p in points]  # Validate all points are numbers
+            except ValueError:
+                return False
+                
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error validating segmentation data: {str(e)}")
+            return False
+
+    def find_matching_bbox(self, points_string: str, bboxes: List[Dict[str, Any]], 
+                         image_width: float, image_height: float, threshold: float = 0.5) -> Optional[Dict[str, Any]]:
+        """
+        Find bbox that best encloses the segmentation points.
+        """
+        try:
+            points = points_string.split()
+            max_overlap = threshold
+            best_bbox = None
+            
+            for bbox in bboxes:
+                overlap = self.calculate_bbox_overlap(
+                    points, 
+                    bbox['bbox'], 
+                    image_width, 
+                    image_height
+                )
+                
+                if overlap > max_overlap:
+                    max_overlap = overlap
+                    best_bbox = bbox
+            
+            return best_bbox
+            
         except Exception as e:
             self.logger.error(f"Error finding matching bbox: {str(e)}")
             return None
 
-def align_bbox_segmentations(self, image_data: Dict[str, Any], segmentation_text: str) -> Dict[str, Any]:
-    """
-    Align segmentations with bounding boxes only where they properly pair.
-    Segmentations without matching bboxes are ignored.
-    Bboxes without matching segmentations keep empty segmentation field.
-    """
-    try:
-        if not image_data or not segmentation_text:
+    def get_label_text(self, label: int) -> str:
+        """
+        Convert numeric label to text description.
+        """
+        label_map = {
+            0: "Incomplete Diatom",
+            1: "Complete Diatom",
+            2: "Fragmented Diatom",
+            3: "Blurred Diatom",
+            4: "Diatom SideView"
+        }
+        return label_map.get(label, "Unknown")
+
+    def process_image_segmentations(self, image_data: Dict[str, Any], segmentation_text: str) -> Dict[str, Any]:
+        """
+        Process and align segmentations with bboxes for an image.
+        """
+        try:
+            if not segmentation_text or not image_data.get('segmentation_indices_array'):
+                return image_data
+                
+            image_width = float(image_data.get('image_width', 1024))
+            image_height = float(image_data.get('image_height', 768))
+            bboxes = image_data.get('info', [])
+            
+            # Parse segmentations
+            segmentations = self.parse_segmentation_file(segmentation_text)
+            
+            # Process each segmentation
+            for seg in segmentations:
+                # Find corresponding entry in segmentation_indices_array
+                seg_dict = next((s for s in image_data['segmentation_indices_array'] 
+                               if s['index'] == seg['index']), None)
+                
+                if not seg_dict:
+                    continue
+                
+                # Update segmentation data
+                seg_dict['segmentation_points'] = seg['points_string']
+                seg_dict['points_count'] = seg['points_count']
+                
+                # Find matching bbox
+                matching_bbox = self.find_matching_bbox(
+                    seg['points_string'],
+                    bboxes,
+                    image_width,
+                    image_height
+                )
+                
+                if matching_bbox:
+                    seg_dict['bbox'] = matching_bbox['bbox']
+                    seg_dict['yolo_bbox'] = matching_bbox['yolo_bbox']
+                    seg_dict['species'] = matching_bbox.get('species', '')
+                    
+                    self.logger.info(f"Matched segmentation {seg['index']} to bbox for species {matching_bbox.get('species', '')}")
+                else:
+                    # Clear bbox-related fields if no match found
+                    seg_dict['bbox'] = ""
+                    seg_dict['yolo_bbox'] = ""
+                    seg_dict['species'] = ""
+            
             return image_data
-
-        self.logger.info(f"Starting alignment for image: {image_data.get('image_url', 'unknown')}")
-        
-        image_width = float(image_data.get('image_width', 1024))
-        image_height = float(image_data.get('image_height', 768))
-        
-        # Get all bounding boxes
-        bboxes = image_data.get('info', [])
-        
-        # Initialize/reset all segmentation fields to empty
-        for bbox in bboxes:
-            bbox['segmentation'] = ""
-        
-        self.logger.info(f"Processing {len(bboxes)} bounding boxes")
-        
-        # Process each line of segmentation text
-        lines = segmentation_text.strip().split('\n')
-        for line in lines:
-            parts = line.split(' ')
-            if len(parts) < 3:  # Need at least label and one point
-                continue
-                
-            # Get label and points
-            label = parts[0]
-            points = []
-            for i in range(1, len(parts), 2):
-                if i + 1 < len(parts):
-                    x = float(parts[i]) * image_width
-                    y = float(parts[i + 1]) * image_height
-                    points.append(f"{x},{y}")
             
-            if not points:
-                continue
-                
-            # Try to find a matching bbox
-            best_match = None
-            max_overlap = 0.5  # Minimum threshold for considering a match
-            
-            for bbox in bboxes:
-                bbox_coords = [float(x) for x in bbox['bbox'].split(',')]
-                x1, y1, x2, y2 = bbox_coords
-                
-                # Count points inside this bbox
-                points_inside = 0
-                for point in points:
-                    px, py = map(float, point.split(','))
-                    if x1 <= px <= x2 and y1 <= py <= y2:
-                        points_inside += 1
-                
-                overlap_ratio = points_inside / len(points)
-                if overlap_ratio > max_overlap:
-                    max_overlap = overlap_ratio
-                    best_match = bbox
-            
-            # If we found a good match, store the segmentation
-            if best_match is not None:
-                best_match['segmentation'] = line
-                self.logger.info(f"Matched segmentation to bbox {best_match.get('index')} "
-                               f"with {len(points)} points and {max_overlap:.2%} overlap")
-        
-        # Log summary
-        matched_count = sum(1 for bbox in bboxes if bbox['segmentation'])
-        self.logger.info(f"Completed alignment: {matched_count} bboxes matched with segmentations "
-                        f"out of {len(bboxes)} total bboxes")
-        
-        # Update image data
-        image_data['info'] = bboxes
-        return image_data
-            
-    except Exception as e:
-        self.logger.error(f"Error aligning bbox segmentations: {str(e)}")
-        return image_data
-
-    def get_segmentation_label_text(self, label: int) -> str:
-        """
-        Convert numeric segmentation label to human-readable text.
-        
-        Args:
-            label (int): Numeric label
-            
-        Returns:
-            str: Human-readable label text
-        """
-        try:
-            label_map = {
-                0: "Incomplete",
-                1: "Complete",
-                2: "Fragmented", 
-                3: "Blurred",
-                4: "SideView"
-            }
-            return label_map.get(label, "Unknown")
         except Exception as e:
-            self.logger.error(f"Error getting label text: {str(e)}")
-            return "Unknown"
-
-    def validate_segmentation_data(self, segmentation: Dict[str, Any]) -> bool:
-        """
-        Validate segmentation data structure.
-        
-        Args:
-            segmentation (Dict): Segmentation data to validate
-            
-        Returns:
-            bool: True if valid, False otherwise
-        """
-        try:
-            required_fields = ['label', 'points']
-            if not all(field in segmentation for field in required_fields):
-                return False
-                
-            if not isinstance(segmentation['points'], list):
-                return False
-                
-            if not all(isinstance(p, dict) and 'x' in p and 'y' in p 
-                      for p in segmentation['points']):
-                return False
-                
-            return True
-        except Exception as e:
-            self.logger.error(f"Error validating segmentation data: {str(e)}")
-            return False
+            self.logger.error(f"Error processing image segmentations: {str(e)}")
+            return image_data
