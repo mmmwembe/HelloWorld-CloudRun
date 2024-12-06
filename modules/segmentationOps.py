@@ -255,25 +255,41 @@ class SegmentationOps:
                     denormalized.extend([str(round(x)), str(round(y))])
                 seg_dict['denormalized_segmentation_points'] = ' '.join(denormalized)
                 
-                # Find matching bbox
-                matching_bbox = self.find_matching_bbox(
-                    seg['points_string'],
-                    bboxes,
-                    image_width,
-                    image_height
-                )
+                # Initialize default values
+                seg_dict['bbox'] = ""
+                seg_dict['yolo_bbox'] = ""
+                seg_dict['species'] = ""
+                
+                # Find matching bbox using denormalized points
+                points_array = [float(p) for p in denormalized]
+                max_overlap = 0
+                matching_bbox = None
+                
+                for bbox in bboxes:
+                    x1, y1, x2, y2 = map(float, bbox['bbox'].split(','))
+                    
+                    # Count points inside bbox
+                    points_inside = 0
+                    total_points = len(points_array) // 2
+                    
+                    for point_idx in range(0, len(points_array), 2):
+                        x = points_array[point_idx]
+                        y = points_array[point_idx + 1]
+                        
+                        if x1 <= x <= x2 and y1 <= y <= y2:
+                            points_inside += 1
+                    
+                    overlap = points_inside / total_points if total_points > 0 else 0
+                    
+                    if overlap > max_overlap and overlap >= 0.5:  # At least 50% of points should be inside
+                        max_overlap = overlap
+                        matching_bbox = bbox
                 
                 if matching_bbox:
                     seg_dict['bbox'] = matching_bbox['bbox']
                     seg_dict['yolo_bbox'] = matching_bbox['yolo_bbox']
                     seg_dict['species'] = matching_bbox.get('species', '')
-                    
                     self.logger.info(f"Matched segmentation {seg['index']} to bbox for species {matching_bbox.get('species', '')}")
-                else:
-                    # Clear bbox-related fields if no match found
-                    seg_dict['bbox'] = ""
-                    seg_dict['yolo_bbox'] = ""
-                    seg_dict['species'] = ""
             
             return image_data
             

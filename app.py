@@ -1184,6 +1184,86 @@ def label_union():
         app.logger.error(f"Error in label_union route: {str(e)}")
         return render_template('error.html', error=str(e)), 500
 
+# @app.route('/api/align_bbox_segmentation', methods=['POST'])
+# def align_bbox_segmentation():
+#     """Align bounding boxes with segmentations for a single image"""
+#     try:
+#         data = request.json
+#         image_index = data.get('image_index', 0)
+        
+#         if not 0 <= image_index < len(DIATOMS_DATA):
+#             raise ValueError("Invalid image index")
+
+#         current_image_data = DIATOMS_DATA[image_index]
+        
+#         # Verify segmentation URL exists
+#         if not current_image_data.get('segmentation_url'):
+#             return jsonify({
+#                 'success': False,
+#                 'error': 'No segmentation data available'
+#             }), 400
+            
+#         # Load segmentation data
+#         segmentation_text = gcp_ops.load_segmentation_data(current_image_data['segmentation_url'])
+#         if not segmentation_text:
+#             return jsonify({
+#                 'success': False,
+#                 'error': 'Failed to load segmentation data'
+#             }), 400
+            
+#         # Process segmentations
+#         updated_image_data = segmentation_ops.process_image_segmentations(
+#             current_image_data,
+#             segmentation_text
+#         )
+        
+#         # Validate results
+#         if not updated_image_data.get('segmentation_indices_array'):
+#             return jsonify({
+#                 'success': False,
+#                 'error': 'Failed to process segmentations'
+#             }), 500
+        
+#         # Update DIATOMS_DATA
+#         DIATOMS_DATA[image_index] = updated_image_data
+        
+#         # Update paper JSON files
+#         updated_paper = False
+#         for paper in PAPER_JSON_FILES:
+#             if isinstance(paper.get('diatoms_data'), str):
+#                 paper['diatoms_data'] = json.loads(paper['diatoms_data'])
+            
+#             if paper['diatoms_data'].get('image_url') == current_image_data.get('image_url'):
+#                 paper['diatoms_data'] = updated_image_data
+#                 updated_paper = True
+#                 break
+        
+#         if not updated_paper:
+#             app.logger.warning(f"No matching paper found for image {image_index}")
+        
+#         # Save to GCP
+#         success = ClaudeAI.update_and_save_papers(
+#             PAPERS_JSON_PUBLIC_URL,
+#             PAPER_JSON_FILES,
+#             DIATOMS_DATA
+#         )
+        
+#         if not success:
+#             raise Exception("Failed to save updates to GCP")
+        
+#         return jsonify({
+#             'success': True,
+#             'message': 'Alignment saved successfully',
+#             'updated_data': updated_image_data
+#         })
+        
+#     except Exception as e:
+#         app.logger.error(f"Error in align_bbox_segmentation: {str(e)}")
+#         return jsonify({
+#             'success': False,
+#             'error': str(e)
+#         }), 500
+
 @app.route('/api/align_bbox_segmentation', methods=['POST'])
 def align_bbox_segmentation():
     """Align bounding boxes with segmentations for a single image"""
@@ -1216,13 +1296,6 @@ def align_bbox_segmentation():
             current_image_data,
             segmentation_text
         )
-        
-        # Validate results
-        if not updated_image_data.get('segmentation_indices_array'):
-            return jsonify({
-                'success': False,
-                'error': 'Failed to process segmentations'
-            }), 500
         
         # Update DIATOMS_DATA
         DIATOMS_DATA[image_index] = updated_image_data
@@ -1263,7 +1336,8 @@ def align_bbox_segmentation():
             'success': False,
             'error': str(e)
         }), 500
-
+        
+        
 @app.route('/api/align_all_images', methods=['POST'])
 def align_all_images():
     """Automatically align bounding boxes with segmentations for all images"""
