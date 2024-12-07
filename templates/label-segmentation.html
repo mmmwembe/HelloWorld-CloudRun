@@ -403,6 +403,7 @@
         imageRef,
         onImageLoad
     }) => {
+
         const drawPolygons = () => {
             const canvas = canvasRef.current;
             if (!canvas) return;
@@ -412,7 +413,7 @@
 
             // Draw completed polygons and their bounding boxes
             polygons.forEach((polygon, index) => {
-                if (polygon.points.length < 3) return;
+                if (!polygon.points || polygon.points.length < 3) return;
 
                 // Draw the polygon
                 ctx.beginPath();
@@ -445,23 +446,33 @@
 
                 // Draw bounding box if it exists
                 if (polygon.denorm_bbox) {
-                    const [topLeft, bottomRight] = polygon.denorm_bbox.split(' ').map(point => {
-                        const [x, y] = point.split(',');
-                        return { x: parseFloat(x), y: parseFloat(y) };
-                    });
+                    try {
+                        const [topLeft, bottomRight] = polygon.denorm_bbox.split(' ').map(point => {
+                            const [x, y] = point.split(',');
+                            return { 
+                                x: parseFloat(x), 
+                                y: parseFloat(y) 
+                            };
+                        });
 
-                    ctx.beginPath();
-                    ctx.strokeStyle = isSelected ? '#ffffff' : polygon.color;
-                    ctx.setLineDash([5, 5]); // Make the bbox dashed
-                    ctx.lineWidth = 1;
-                    ctx.rect(
-                        topLeft.x,
-                        topLeft.y,
-                        bottomRight.x - topLeft.x,
-                        bottomRight.y - topLeft.y
-                    );
-                    ctx.stroke();
-                    ctx.setLineDash([]); // Reset line style
+                        if (!isNaN(topLeft.x) && !isNaN(topLeft.y) && 
+                            !isNaN(bottomRight.x) && !isNaN(bottomRight.y)) {
+                            ctx.beginPath();
+                            ctx.strokeStyle = isSelected ? '#ffffff' : polygon.color;
+                            ctx.setLineDash([5, 5]); // Make the bbox dashed
+                            ctx.lineWidth = 1;
+                            ctx.rect(
+                                topLeft.x,
+                                topLeft.y,
+                                bottomRight.x - topLeft.x,
+                                bottomRight.y - topLeft.y
+                            );
+                            ctx.stroke();
+                            ctx.setLineDash([]); // Reset line style
+                        }
+                    } catch (e) {
+                        console.error('Error drawing bbox:', e);
+                    }
                 }
                 
                 if (isSelected) {
@@ -498,6 +509,7 @@
             }
         };
 
+
         React.useEffect(() => {
             drawPolygons();
         }, [polygons, currentPolygon, selectedSegmentIndex]);
@@ -512,17 +524,25 @@
                     src={imageUrl}
                     alt="Diatom"
                     className="w-full"
+
                     onLoad={() => {
                         const canvas = canvasRef.current;
                         const container = containerRef.current;
                         const image = imageRef.current;
                         
                         if (canvas && container && image) {
-                            canvas.width = image.width;  // Use image dimensions instead of container
-                            canvas.height = image.height;
-                            canvas.style.width = '100%';  // Make canvas responsive
+                            console.log('Setting canvas dimensions:', {
+                                imageWidth: image.naturalWidth,
+                                imageHeight: image.naturalHeight,
+                                containerWidth: container.offsetWidth,
+                                containerHeight: container.offsetHeight
+                            });
+                            canvas.width = image.naturalWidth;
+                            canvas.height = image.naturalHeight;
+                            canvas.style.width = '100%';
                             canvas.style.height = 'auto';
                             onImageLoad?.();
+                            console.log('Drawing polygons:', polygons);
                             drawPolygons();
                         }
                     }}
@@ -564,6 +584,7 @@
         React.useEffect(() => {
             loadImageData(imageIndex);
         }, [imageIndex]);
+
 
 
         const loadImageData = async (index) => {
@@ -608,32 +629,37 @@
                         }
                         
                         const segData = await segResponse.json();
-                        console.log('Loaded segmentation data:', segData); // Debug log
+                        console.log('Loaded segmentation data:', segData);
 
                         if (segData.segmentation_indices_array?.length > 0) {
-                            // Validate the segmentation indices before using them
+                            // Use existing segmentation indices if available
                             const validPolygons = segData.segmentation_indices_array.filter(segment => 
                                 segment.points && 
                                 Array.isArray(segment.points) && 
-                                segment.points.length > 2 &&
-                                segment.points.every(point => 
-                                    point &&
-                                    typeof point.x === 'number' && 
-                                    typeof point.y === 'number' &&
-                                    !isNaN(point.x) && 
-                                    !isNaN(point.y)
-                                )
-                            );
+                                segment.points.length > 2
+                            ).map(segment => {
+                                // Preserve all existing data including bbox
+                                const polygon = {
+                                    ...segment,
+                                    color: segment.color || getRandomColor(),
+                                    points: segment.denorm_polygon_points || segment.points
+                                };
 
-                            // Use existing segmentation indices if available
-                            const enhancedPolygons = validPolygons.map(segment => ({
-                                ...segment,
-                                color: segment.color || getRandomColor()
-                            }));
-                            console.log('Using existing segmentation indices:', enhancedPolygons); // Debug log
-                            setPolygons(enhancedPolygons);
+                                // If the polygon doesn't have enhanced data, calculate it
+                                if (!segment.denorm_bbox) {
+                                    const enhancedData = calculatePolygonData(
+                                        polygon.points,
+                                        img.naturalWidth,
+                                        img.naturalHeight
+                                    );
+                                    return {...polygon, ...enhancedData};
+                                }
+                                return polygon;
+                            });
+
+                            console.log('Valid polygons to display:', validPolygons);
+                            setPolygons(validPolygons);
                         } else if (segData.annotations && typeof segData.annotations === 'string' && segData.annotations.trim()) {
-                            // Parse annotations if no indices exist
                             const processedPolygons = parseSegmentationText(
                                 segData.annotations,
                                 img.naturalWidth,
@@ -649,7 +675,7 @@
                                         img.naturalHeight
                                     )
                                 }));
-                                console.log('Processed new polygons:', enhancedPolygons); // Debug log
+                                console.log('Processed new polygons:', enhancedPolygons);
                                 setPolygons(enhancedPolygons);
                             } else {
                                 console.log('No valid polygons found in annotations');
