@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diatom Segmentation</title>
+    <!-- External Dependencies -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    
+    <!-- Custom Styles -->
+    <style>
+        @keyframes slide-up {
+            from { transform: translateY(100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .animate-slide-up {
+            animation: slide-up 0.3s ease-out;
+        }
+        circle {
+            transition: stroke-dashoffset 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- Module Imports -->
+    <script type="text/babel" src="/static/react/js/utils/polygon-utils.js"></script>
+    <script type="text/babel" src="/static/react/js/components/DiatomSelector.js"></script>
+    <script type="text/babel" src="/static/react/js/components/SegmentationList.js"></script>
+    <script type="text/babel" src="/static/react/js/components/CircularProgress.js"></script>
+    <script type="text/babel" src="/static/react/js/components/Toast.js"></script>
+    <script type="text/babel" src="/static/react/js/components/SegmentationButtons.js"></script>
+    <script type="text/babel" src="/static/react/js/components/Sidebar.js"></script>
+    <script type="text/babel" src="/static/react/js/components/Canvas.js"></script>
+    <script type="text/babel" src="/static/react/js/label-segmentation.js"></script>
+</body>
+</html>
