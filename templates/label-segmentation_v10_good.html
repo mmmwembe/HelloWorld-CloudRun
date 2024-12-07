@@ -38,18 +38,18 @@
             const centerX = topLeft.x + width / 2;
             const centerY = topLeft.y + height / 2;
             
-            // Create normalized points with 4 decimal places
+            // Create normalized points
             const normalizedPoints = points.map(point => ({
-                x: Number((point.x / imageWidth).toFixed(4)),
-                y: Number((point.y / imageHeight).toFixed(4))
+                x: point.x / imageWidth,
+                y: point.y / imageHeight
             }));
             
-            // Create YOLO format bbox with 4 decimal places
+            // Create YOLO format bbox
             const yoloBBox = [
-                Number((centerX / imageWidth).toFixed(4)),
-                Number((centerY / imageHeight).toFixed(4)),
-                Number((width / imageWidth).toFixed(4)),
-                Number((height / imageHeight).toFixed(4))
+                centerX / imageWidth,
+                centerY / imageHeight,
+                width / imageWidth,
+                height / imageHeight
             ];
             
             return {
@@ -59,7 +59,7 @@
                 denorm_ys: denormYs,
                 denorm_top_left: topLeft,
                 denorm_bottom_right: bottomRight,
-                denorm_bbox: `${Number(topLeft.x).toFixed(4)},${Number(topLeft.y).toFixed(4)} ${Number(bottomRight.x).toFixed(4)},${Number(bottomRight.y).toFixed(4)}`,
+                denorm_bbox: `${topLeft.x},${topLeft.y} ${bottomRight.x},${bottomRight.y}`,
                 denorm_calculated_yolobbox: yoloBBox,
                 image_width: imageWidth,
                 image_height: imageHeight
@@ -69,9 +69,9 @@
         const generateSegmentationText = (polygons, imageWidth, imageHeight) => {
             return polygons.map(polygon => {
                 const normalizedPoints = polygon.points.map(point => {
-                    const x = Number((point.x / imageWidth).toFixed(4));
-                    const y = Number((point.y / imageHeight).toFixed(4));
-                    return `${x} ${y}`;
+                    const x = point.x / imageWidth;
+                    const y = point.y / imageHeight;
+                    return `${x.toFixed(6)} ${y.toFixed(6)}`;
                 }).join(' ');
                 return `${polygon.label} ${normalizedPoints}`;
             }).join('\n');
@@ -131,23 +131,19 @@
         }
 
         // SegmentationList Component
-        function SegmentationList({ polygons, selectedIndex, onSelectSegment, onDeleteSegment, getDiatomLabel }) {
-                return (
-                    <div className="mt-4 space-y-2 px-4">
-                        {polygons.map((polygon, index) => (
-                            <div
-                                key={index}
-                                onClick={() => onSelectSegment(index)}
-                                onDoubleClick={(e) => {
-                                    e.stopPropagation();
-                                    onDeleteSegment(index);
-                                }}
-                                className={`p-3 rounded-lg cursor-pointer transition-all duration-200 ${
-                                    selectedIndex === index 
-                                        ? 'bg-blue-600 text-white shadow-lg transform scale-105' 
-                                        : 'bg-gray-700 text-gray-200 hover:bg-gray-600'
-                                }`}
-                            >
+        function SegmentationList({ polygons, selectedIndex, onSelectSegment, getDiatomLabel }) {
+            return (
+                <div className="mt-4 space-y-2 px-4">
+                    {polygons.map((polygon, index) => (
+                        <div
+                            key={index}
+                            onClick={() => onSelectSegment(index)}
+                            className={`p-3 rounded-lg cursor-pointer transition-all duration-200 ${
+                                selectedIndex === index 
+                                    ? 'bg-blue-600 text-white shadow-lg transform scale-105' 
+                                    : 'bg-gray-700 text-gray-200 hover:bg-gray-600'
+                            }`}
+                        >
                             <div className="flex items-center justify-between">
                                 <span className="font-medium">
                                     {index + 1}. {getDiatomLabel(polygon.label)}
@@ -529,35 +525,6 @@
                 setImageIndex(prev => Math.min(totalImages - 1, prev + 1));
             };
 
-            const handleDeleteSegment = async (index) => {
-                if (window.confirm('Are you sure you want to delete this segmentation?')) {
-                    try {
-                        const response = await fetch('/api/delete_segmentation', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({
-                                image_index: imageIndex,
-                                segmentation_index: index
-                            })
-                        });
-                        
-                        const data = await response.json();
-                        if (data.success) {
-                            const updatedPolygons = polygons.filter((_, i) => i !== index);
-                            setPolygons(updatedPolygons);
-                            setSelectedSegmentIndex(null);
-                        } else {
-                            throw new Error(data.error || 'Failed to delete segmentation');
-                        }
-                    } catch (error) {
-                        console.error('Error deleting segmentation:', error);
-                        alert('Failed to delete segmentation: ' + error.message);
-                    }
-                }
-            };
-            
             const handleMouseMove = (e) => {
                 if (!isDrawing) return;
                 drawPolygons();
@@ -574,7 +541,6 @@
             const handleSelectSegment = (index) => {
                 setSelectedSegmentIndex(index === selectedSegmentIndex ? null : index);
             };
-
 
             const parseSegmentationFile = (content, imageWidth, imageHeight) => {
                 if (!content.trim()) return [];
@@ -765,7 +731,6 @@
                                 <li>Click near the start point to close the polygon</li>
                                 <li>Press ESC to cancel current polygon</li>
                                 <li>Click on a segmentation in the list to highlight it</li>
-                                <li>Double click on a segmentation in the list to delete it</li>
                             </ul>
                         </div>
                         
@@ -773,7 +738,6 @@
                             polygons={polygons}
                             selectedIndex={selectedSegmentIndex}
                             onSelectSegment={handleSelectSegment}
-                            onDeleteSegment={handleDeleteSegment}
                             getDiatomLabel={getDiatomLabel}
                         />
                     </div>
