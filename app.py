@@ -495,6 +495,87 @@ def segmentation():
         app.logger.error("Error in segmentation route: {}".format(str(e)))
         return render_template('error.html', error=str(e)), 500
 
+# @app.route('/api/save_segmentation', methods=['POST'])
+# def save_segmentation():
+#     """Save segmentation data and indices array to GCS bucket and update DIATOMS_DATA"""
+#     try:
+#         data = request.json
+#         image_index = data.get('image_index', 0)
+#         segmentation_data = data.get('segmentation_data', '')
+#         image_filename = data.get('image_filename', '')
+#         segmentation_indices = data.get('segmentation_indices', [])
+        
+#         logger.info(f"Saving segmentation for image {image_filename}")
+#         logger.debug(f"Segmentation data: {segmentation_data}")
+#         logger.debug(f"Segmentation indices: {segmentation_indices}")
+        
+#         if not segmentation_data or not image_filename:
+#             raise ValueError("Missing required data")
+            
+#         # Save segmentation data to GCS bucket
+#         segmentation_url = gcp_ops.save_segmentation_data(
+#             segmentation_data=segmentation_data,
+#             image_filename=image_filename,
+#             session_id=SESSION_ID,
+#             bucket_name=BUCKET_SEGMENTATION_LABELS
+#         )
+        
+#         if not segmentation_url:
+#             raise Exception("Failed to save segmentation data to GCS")
+        
+#         logger.info(f"Saved segmentation to URL: {segmentation_url}")
+            
+#         # Update DIATOMS_DATA with segmentation URL and indices array
+#         if 0 <= image_index < len(DIATOMS_DATA):
+#             DIATOMS_DATA[image_index]['segmentation_url'] = segmentation_url
+#             DIATOMS_DATA[image_index]['segmentation_indices_array'] = segmentation_indices
+            
+#             # Store canvas dimensions if not present
+#             if 'canvasWidth' not in DIATOMS_DATA[image_index]:
+#                 DIATOMS_DATA[image_index]['canvasWidth'] = DIATOMS_DATA[image_index].get('image_width')
+#             if 'canvasHeight' not in DIATOMS_DATA[image_index]:
+#                 DIATOMS_DATA[image_index]['canvasHeight'] = DIATOMS_DATA[image_index].get('image_height')
+            
+#             # Update corresponding entry in PAPER_JSON_FILES
+#             for paper in PAPER_JSON_FILES:
+#                 if 'diatoms_data' in paper:
+#                     if isinstance(paper['diatoms_data'], str):
+#                         paper['diatoms_data'] = json.loads(paper['diatoms_data'])
+                    
+#                     if paper['diatoms_data'].get('image_url') == DIATOMS_DATA[image_index].get('image_url'):
+#                         paper['diatoms_data'].update({
+#                             'segmentation_url': segmentation_url,
+#                             'segmentation_indices_array': segmentation_indices,
+#                             'canvasWidth': DIATOMS_DATA[image_index].get('canvasWidth'),
+#                             'canvasHeight': DIATOMS_DATA[image_index].get('canvasHeight')
+#                         })
+#                         break
+            
+#             # Save updated data to GCS
+#             success = ClaudeAI.update_and_save_papers(
+#                 PAPERS_JSON_PUBLIC_URL,
+#                 PAPER_JSON_FILES,
+#                 DIATOMS_DATA
+#             )
+            
+#             if not success:
+#                 raise Exception("Failed to update papers data in GCS")
+                
+#             return jsonify({
+#                 'success': True,
+#                 'message': 'Segmentation saved successfully',
+#                 'segmentation_url': segmentation_url,
+#                 'segmentation_indices_array': segmentation_indices
+#             })
+#         else:
+#             raise ValueError(f"Invalid image index: {image_index}")
+            
+#     except Exception as e:
+#         logger.error(f"Error saving segmentation: {str(e)}")
+#         return jsonify({
+#             'success': False,
+#             'error': str(e)
+#         }), 500
 @app.route('/api/save_segmentation', methods=['POST'])
 def save_segmentation():
     """Save segmentation data and indices array to GCS bucket and update DIATOMS_DATA"""
@@ -504,53 +585,33 @@ def save_segmentation():
         segmentation_data = data.get('segmentation_data', '')
         image_filename = data.get('image_filename', '')
         segmentation_indices = data.get('segmentation_indices', [])
+
+        # Extract canvas dimensions from the first segmentation index if available
+        canvas_width = None
+        canvas_height = None
+        if segmentation_indices:
+            first_index = segmentation_indices[0]
+            canvas_width = first_index.get('canvasWidth')
+            canvas_height = first_index.get('canvasHeight')
         
-        logger.info(f"Saving segmentation for image {image_filename}")
-        logger.debug(f"Segmentation data: {segmentation_data}")
-        logger.debug(f"Segmentation indices: {segmentation_indices}")
-        
-        if not segmentation_data or not image_filename:
-            raise ValueError("Missing required data")
-            
-        # Save segmentation data to GCS bucket
-        segmentation_url = gcp_ops.save_segmentation_data(
-            segmentation_data=segmentation_data,
-            image_filename=image_filename,
-            session_id=SESSION_ID,
-            bucket_name=BUCKET_SEGMENTATION_LABELS
-        )
-        
-        if not segmentation_url:
-            raise Exception("Failed to save segmentation data to GCS")
-        
-        logger.info(f"Saved segmentation to URL: {segmentation_url}")
-            
         # Update DIATOMS_DATA with segmentation URL and indices array
         if 0 <= image_index < len(DIATOMS_DATA):
-            DIATOMS_DATA[image_index]['segmentation_url'] = segmentation_url
-            DIATOMS_DATA[image_index]['segmentation_indices_array'] = segmentation_indices
+            # Save canvas dimensions if available
+            if canvas_width and canvas_height:
+                DIATOMS_DATA[image_index]['canvasWidth'] = canvas_width
+                DIATOMS_DATA[image_index]['canvasHeight'] = canvas_height
             
-            # Store canvas dimensions if not present
-            if 'canvasWidth' not in DIATOMS_DATA[image_index]:
-                DIATOMS_DATA[image_index]['canvasWidth'] = DIATOMS_DATA[image_index].get('image_width')
-            if 'canvasHeight' not in DIATOMS_DATA[image_index]:
-                DIATOMS_DATA[image_index]['canvasHeight'] = DIATOMS_DATA[image_index].get('image_height')
-            
-            # Update corresponding entry in PAPER_JSON_FILES
+            # Update paper JSON files
             for paper in PAPER_JSON_FILES:
                 if 'diatoms_data' in paper:
                     if isinstance(paper['diatoms_data'], str):
                         paper['diatoms_data'] = json.loads(paper['diatoms_data'])
                     
                     if paper['diatoms_data'].get('image_url') == DIATOMS_DATA[image_index].get('image_url'):
-                        paper['diatoms_data'].update({
-                            'segmentation_url': segmentation_url,
-                            'segmentation_indices_array': segmentation_indices,
-                            'canvasWidth': DIATOMS_DATA[image_index].get('canvasWidth'),
-                            'canvasHeight': DIATOMS_DATA[image_index].get('canvasHeight')
-                        })
-                        break
-            
+                        if canvas_width and canvas_height:
+                            paper['diatoms_data']['canvasWidth'] = canvas_width
+                            paper['diatoms_data']['canvasHeight'] = canvas_height
+
             # Save updated data to GCS
             success = ClaudeAI.update_and_save_papers(
                 PAPERS_JSON_PUBLIC_URL,
@@ -560,23 +621,16 @@ def save_segmentation():
             
             if not success:
                 raise Exception("Failed to update papers data in GCS")
-                
-            return jsonify({
-                'success': True,
-                'message': 'Segmentation saved successfully',
-                'segmentation_url': segmentation_url,
-                'segmentation_indices_array': segmentation_indices
-            })
-        else:
-            raise ValueError(f"Invalid image index: {image_index}")
-            
+
+        # Rest of your existing save_segmentation code...
+        
     except Exception as e:
         logger.error(f"Error saving segmentation: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)
         }), 500
-
+        
 @app.route('/api/get_segmentation')
 def get_segmentation():
     """Get segmentation data with enhanced fields"""

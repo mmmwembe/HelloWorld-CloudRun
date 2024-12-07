@@ -457,37 +457,70 @@ function DiatomSegmenter() {
                 await handleAutoSave(updatedPolygons);
             };
 
-            const handleImageLoad = () => {
+            
+            const handleImageLoad = async () => {
                 const canvas = canvasRef.current;
                 const container = containerRef.current;
                 const image = imageRef.current;
                 
                 if (canvas && container && image) {
+                    // Set canvas dimensions based on the container
                     canvas.width = container.offsetWidth;
                     canvas.height = container.offsetHeight;
                     
-                    // Update canvas dimensions in image data
-                    if (imageData && (!imageData.canvasWidth || !imageData.canvasHeight)) {
-                        setImageData(prev => ({
-                            ...prev,
-                            canvasWidth: image.naturalWidth,
-                            canvasHeight: image.naturalHeight
-                        }));
-                    }
+                    // Update and save canvas dimensions
+                    const updatedImageData = {
+                        ...imageData,
+                        canvasWidth: image.naturalWidth,
+                        canvasHeight: image.naturalHeight
+                    };
+                    setImageData(updatedImageData);
                     
-                    if (pendingSegmentationData) {
-                        const loadedPolygons = parseSegmentationFile(
-                            pendingSegmentationData,
-                            image.naturalWidth,
-                            image.naturalHeight
-                        );
-                        setPolygons(loadedPolygons);
-                        setPendingSegmentationData(null);
-                    }
-                    
-                    drawPolygons();
-                }
-            };
+                    // Save canvas dimensions to backend
+                    try {
+                        const response = await fetch('/api/save_segmentation', {
+                            method: 'POST',
+                            headers: {
+                                        'Content-Type': 'application/json',
+                                    },
+                                    body: JSON.stringify({
+                                        image_index: imageIndex,
+                                        segmentation_data: generateSegmentationTextFromPolygons(polygons),
+                                        image_filename: imageUrl.split('/').pop().replace(/\.[^/.]+$/, ''),
+                                        segmentation_indices: polygons.map((polygon, index) => ({
+                                            index,
+                                            label: polygon.label,
+                                            points_count: polygon.points.length,
+                                            label_text: getDiatomLabel(polygon.label),
+                                            canvasWidth: image.naturalWidth,
+                                            canvasHeight: image.naturalHeight
+                                        }))
+                                    })
+                                });
+                                
+                                if (!response.ok) {
+                                    console.error('Failed to save canvas dimensions');
+                                }
+                            } catch (error) {
+                                console.error('Error saving canvas dimensions:', error);
+                            }
+                            
+                            // Process pending segmentation data if exists
+                            if (pendingSegmentationData) {
+                                const loadedPolygons = parseSegmentationFile(
+                                    pendingSegmentationData,
+                                    image.naturalWidth,
+                                    image.naturalHeight
+                                );
+                                setPolygons(loadedPolygons);
+                                setPendingSegmentationData(null);
+                            }
+                            
+                            drawPolygons();
+                        }
+                    };
+
+
             const drawPolygons = () => {
                 const canvas = canvasRef.current;
                 if (!canvas) return;
