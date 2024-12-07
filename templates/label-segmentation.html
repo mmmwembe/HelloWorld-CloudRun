@@ -483,7 +483,7 @@
             const handleAutoSave = async (updatedPolygons) => {
                 // Filter out polygons with less than 4 points
                 const validPolygons = updatedPolygons.filter(polygon => polygon.points.length >= 4);
-                
+
                 if (validPolygons.length === 0) {
                     alert('No valid polygons to save. Each polygon must have at least 4 points.');
                     return;
@@ -491,30 +491,24 @@
 
                 setIsSaving(true);
                 setSaveProgress(0);
-                
+
                 const progressInterval = setInterval(() => {
                     setSaveProgress(prev => Math.min(prev + 10, 90));
                 }, 100);
 
                 try {
-                    const image = imageRef.current;
-                    const imageWidth = image.naturalWidth;
-                    const imageHeight = image.naturalHeight;
-                    
                     const segmentationText = generateSegmentationTextFromPolygons(validPolygons);
                     const imageFileName = imageUrl.split('/').pop().replace(/\.[^/.]+$/, '');
-                    
-                    const segmentationIndices = validPolygons.map((polygon, index) => {
-                        const metrics = calculatePolygonMetrics(polygon.points, imageWidth, imageHeight);
-                        return {
-                            index: index,
-                            label: polygon.label,
-                            points_count: polygon.points.length,
-                            label_text: getDiatomLabel(polygon.label),
-                            ...metrics
-                        };
-                    });
-                    
+
+                    const segmentationIndices = validPolygons.map((polygon, index) => ({
+                        index: index,
+                        label: polygon.label,
+                        points_count: polygon.points.length,
+                        label_text: getDiatomLabel(polygon.label),
+                        denorm_bbox: `${Math.round(polygon.denorm_top_left.x)},${Math.round(polygon.denorm_top_left.y)} ${Math.round(polygon.denorm_bottom_right.x)},${Math.round(polygon.denorm_bottom_right.y)}`,
+                        denorm_calculated_yolobbox: Object.values(polygon.denorm_calculated_yolobbox).join(' ')
+                    }));
+
                     const response = await fetch('/api/save_segmentation', {
                         method: 'POST',
                         headers: {
@@ -527,12 +521,12 @@
                             segmentation_indices: segmentationIndices
                         })
                     });
-                    
+
                     const data = await response.json();
-                    
+
                     clearInterval(progressInterval);
                     setSaveProgress(100);
-                    
+
                     if (data.success) {
                         setShowToast(true);
                         setImageData(prev => ({
