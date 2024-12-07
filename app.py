@@ -495,6 +495,112 @@ def segmentation():
         app.logger.error("Error in segmentation route: {}".format(str(e)))
         return render_template('error.html', error=str(e)), 500
 
+@app.route('/api/save_segmentation', methods=['POST'])
+def save_segmentation():
+    try:
+        data = request.json
+        image_index = data.get('image_index', 0)
+        segmentation_data = data.get('segmentation_data', '')
+        image_filename = data.get('image_filename', '')
+        segmentation_indices = data.get('segmentation_indices', [])
+        
+        # Filter out indices with less than 4 points
+        segmentation_indices = [
+            index for index in segmentation_indices 
+            if index.get('points_count', 0) >= 4
+        ]
+        
+        if not segmentation_indices:
+            raise ValueError("No valid polygons to save. Each polygon must have at least 4 points.")
+            
+        # Validate required fields for each segmentation index
+        for index in segmentation_indices:
+            required_fields = [
+                'norm_polygon_points',
+                'denorm_polygon_points',
+                'denorm_xs',
+                'denorm_ys',
+                'denorm_top_left',
+                'denorm_bottom_right',
+                'denorm_bbox',
+                'denorm_calculated_yolobbox',
+                'image_width',
+                'image_height'
+            ]
+            
+            missing_fields = [field for field in required_fields if field not in index]
+            if missing_fields:
+                raise ValueError(f"Missing required fields in segmentation index: {missing_fields}")
+        
+        logger.info(f"Saving segmentation for image {image_filename}")
+        logger.debug(f"Segmentation data: {segmentation_data}")
+        logger.debug(f"Segmentation indices: {segmentation_indices}")
+        
+        # Save segmentation data to GCS bucket
+        segmentation_url = gcp_ops.save_segmentation_data(
+            segmentation_data=segmentation_data,
+            image_filename=image_filename,
+            session_id=SESSION_ID,
+            bucket_name=BUCKET_SEGMENTATION_LABELS
+        )
+        
+        if not segmentation_url:
+            raise Exception("Failed to save segmentation data to GCS")
+        
+        logger.info(f"Saved segmentation to URL: {segmentation_url}")
+            
+        # Update DIATOMS_DATA with enhanced indices array
+        if 0 <= image_index < len(DIATOMS_DATA):
+            DIATOMS_DATA[image_index]['segmentation_url'] = segmentation_url
+            DIATOMS_DATA[image_index]['segmentation_indices_array'] = segmentation_indices
+            
+            # Store canvas dimensions if not present
+            if 'canvasWidth' not in DIATOMS_DATA[image_index]:
+                DIATOMS_DATA[image_index]['canvasWidth'] = segmentation_indices[0]['image_width'] if segmentation_indices else None
+            if 'canvasHeight' not in DIATOMS_DATA[image_index]:
+                DIATOMS_DATA[image_index]['canvasHeight'] = segmentation_indices[0]['image_height'] if segmentation_indices else None
+            
+            # Update corresponding entry in PAPER_JSON_FILES
+            for paper in PAPER_JSON_FILES:
+                if 'diatoms_data' in paper:
+                    if isinstance(paper['diatoms_data'], str):
+                        paper['diatoms_data'] = json.loads(paper['diatoms_data'])
+                    
+                    if paper['diatoms_data'].get('image_url') == DIATOMS_DATA[image_index].get('image_url'):
+                        paper['diatoms_data'].update({
+                            'segmentation_url': segmentation_url,
+                            'segmentation_indices_array': segmentation_indices,
+                            'canvasWidth': DIATOMS_DATA[image_index].get('canvasWidth'),
+                            'canvasHeight': DIATOMS_DATA[image_index].get('canvasHeight')
+                        })
+                        break
+            
+            success = ClaudeAI.update_and_save_papers(
+                PAPERS_JSON_PUBLIC_URL,
+                PAPER_JSON_FILES,
+                DIATOMS_DATA
+            )
+            
+            if not success:
+                raise Exception("Failed to update papers data in GCS")
+                
+            return jsonify({
+                'success': True,
+                'message': 'Segmentation saved successfully',
+                'segmentation_url': segmentation_url,
+                'segmentation_indices_array': segmentation_indices
+            })
+            
+        else:
+            raise ValueError(f"Invalid image index: {image_index}")
+            
+    except Exception as e:
+        logger.error(f"Error saving segmentation: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 # @app.route('/api/save_segmentation', methods=['POST'])
 # def save_segmentation():
 #     """Save segmentation data and indices array to GCS bucket and update DIATOMS_DATA"""
@@ -652,152 +758,152 @@ def segmentation():
 #         }), 500
 # Add to app.py
 
-@app.route('/api/save_segmentation', methods=['POST'])
-def save_segmentation():
-    """Save segmentation data with enhanced structure"""
-    try:
-        data = request.json
-        image_index = data.get('image_index', 0)
-        segmentation_data = data.get('segmentation_data', '')
-        image_filename = data.get('image_filename', '')
-        segmentation_indices = data.get('segmentation_indices', [])
+# @app.route('/api/save_segmentation', methods=['POST'])
+# def save_segmentation():
+#     """Save segmentation data with enhanced structure"""
+#     try:
+#         data = request.json
+#         image_index = data.get('image_index', 0)
+#         segmentation_data = data.get('segmentation_data', '')
+#         image_filename = data.get('image_filename', '')
+#         segmentation_indices = data.get('segmentation_indices', [])
         
-        logger.info(f"Processing save request for image {image_filename}")
+#         logger.info(f"Processing save request for image {image_filename}")
         
-        if not segmentation_data or not image_filename:
-            raise ValueError("Missing required data")
+#         if not segmentation_data or not image_filename:
+#             raise ValueError("Missing required data")
             
-        # Save segmentation data to GCS bucket
-        segmentation_url = gcp_ops.save_segmentation_data(
-            segmentation_data=segmentation_data,
-            image_filename=image_filename,
-            session_id=SESSION_ID,
-            bucket_name=BUCKET_SEGMENTATION_LABELS
-        )
+#         # Save segmentation data to GCS bucket
+#         segmentation_url = gcp_ops.save_segmentation_data(
+#             segmentation_data=segmentation_data,
+#             image_filename=image_filename,
+#             session_id=SESSION_ID,
+#             bucket_name=BUCKET_SEGMENTATION_LABELS
+#         )
         
-        if not segmentation_url:
-            raise Exception("Failed to save segmentation data to GCS")
+#         if not segmentation_url:
+#             raise Exception("Failed to save segmentation data to GCS")
             
-        # Update DIATOMS_DATA with enhanced data
-        if 0 <= image_index < len(DIATOMS_DATA):
-            current_image = DIATOMS_DATA[image_index]
-            image_width = current_image.get('image_width')
-            image_height = current_image.get('image_height')
+#         # Update DIATOMS_DATA with enhanced data
+#         if 0 <= image_index < len(DIATOMS_DATA):
+#             current_image = DIATOMS_DATA[image_index]
+#             image_width = current_image.get('image_width')
+#             image_height = current_image.get('image_height')
             
-            # Process and enhance segmentation indices
-            enhanced_indices = []
-            for segment in segmentation_indices:
-                points = segment.get('points', [])
-                if not points:
-                    continue
+#             # Process and enhance segmentation indices
+#             enhanced_indices = []
+#             for segment in segmentation_indices:
+#                 points = segment.get('points', [])
+#                 if not points:
+#                     continue
                     
-                # Extract existing data
-                segment_data = {
-                    'label': segment.get('label', 0),
-                    'points': points,
-                    'color': segment.get('color', '#2ecc71')
-                }
+#                 # Extract existing data
+#                 segment_data = {
+#                     'label': segment.get('label', 0),
+#                     'points': points,
+#                     'color': segment.get('color', '#2ecc71')
+#                 }
                 
-                # Calculate normalized coordinates
-                norm_points = [
-                    {
-                        'x': point['x'] / image_width,
-                        'y': point['y'] / image_height
-                    }
-                    for point in points
-                ]
+#                 # Calculate normalized coordinates
+#                 norm_points = [
+#                     {
+#                         'x': point['x'] / image_width,
+#                         'y': point['y'] / image_height
+#                     }
+#                     for point in points
+#                 ]
                 
-                # Calculate arrays and bounding boxes
-                denorm_xs = [p['x'] for p in points]
-                denorm_ys = [p['y'] for p in points]
+#                 # Calculate arrays and bounding boxes
+#                 denorm_xs = [p['x'] for p in points]
+#                 denorm_ys = [p['y'] for p in points]
                 
-                top_left = {
-                    'x': min(denorm_xs),
-                    'y': min(denorm_ys)
-                }
+#                 top_left = {
+#                     'x': min(denorm_xs),
+#                     'y': min(denorm_ys)
+#                 }
                 
-                bottom_right = {
-                    'x': max(denorm_xs),
-                    'y': max(denorm_ys)
-                }
+#                 bottom_right = {
+#                     'x': max(denorm_xs),
+#                     'y': max(denorm_ys)
+#                 }
                 
-                # Calculate width and height
-                width = bottom_right['x'] - top_left['x']
-                height = bottom_right['y'] - top_left['y']
+#                 # Calculate width and height
+#                 width = bottom_right['x'] - top_left['x']
+#                 height = bottom_right['y'] - top_left['y']
                 
-                # Calculate center points
-                center_x = top_left['x'] + width / 2
-                center_y = top_left['y'] + height / 2
+#                 # Calculate center points
+#                 center_x = top_left['x'] + width / 2
+#                 center_y = top_left['y'] + height / 2
                 
-                # Add enhanced data
-                segment_data.update({
-                    'norm_polygon_points': norm_points,
-                    'denorm_polygon_points': points,
-                    'denorm_xs': denorm_xs,
-                    'denorm_ys': denorm_ys,
-                    'denorm_top_left': top_left,
-                    'denorm_bottom_right': bottom_right,
-                    'denorm_bbox': f"{top_left['x']},{top_left['y']} {bottom_right['x']},{bottom_right['y']}",
-                    'denorm_calculated_yolobbox': [
-                        center_x / image_width,
-                        center_y / image_height,
-                        width / image_width,
-                        height / image_height
-                    ],
-                    'image_width': image_width,
-                    'image_height': image_height
-                })
+#                 # Add enhanced data
+#                 segment_data.update({
+#                     'norm_polygon_points': norm_points,
+#                     'denorm_polygon_points': points,
+#                     'denorm_xs': denorm_xs,
+#                     'denorm_ys': denorm_ys,
+#                     'denorm_top_left': top_left,
+#                     'denorm_bottom_right': bottom_right,
+#                     'denorm_bbox': f"{top_left['x']},{top_left['y']} {bottom_right['x']},{bottom_right['y']}",
+#                     'denorm_calculated_yolobbox': [
+#                         center_x / image_width,
+#                         center_y / image_height,
+#                         width / image_width,
+#                         height / image_height
+#                     ],
+#                     'image_width': image_width,
+#                     'image_height': image_height
+#                 })
                 
-                enhanced_indices.append(segment_data)
+#                 enhanced_indices.append(segment_data)
             
-            # Update current image data
-            current_image['segmentation_url'] = segmentation_url
-            current_image['segmentation_indices_array'] = enhanced_indices
+#             # Update current image data
+#             current_image['segmentation_url'] = segmentation_url
+#             current_image['segmentation_indices_array'] = enhanced_indices
             
-            # Store canvas dimensions if not present
-            if 'canvasWidth' not in current_image:
-                current_image['canvasWidth'] = image_width
-            if 'canvasHeight' not in current_image:
-                current_image['canvasHeight'] = image_height
+#             # Store canvas dimensions if not present
+#             if 'canvasWidth' not in current_image:
+#                 current_image['canvasWidth'] = image_width
+#             if 'canvasHeight' not in current_image:
+#                 current_image['canvasHeight'] = image_height
             
-            # Update DIATOMS_DATA
-            DIATOMS_DATA[image_index] = current_image
+#             # Update DIATOMS_DATA
+#             DIATOMS_DATA[image_index] = current_image
             
-            # Update corresponding entry in PAPER_JSON_FILES
-            for paper in PAPER_JSON_FILES:
-                if 'diatoms_data' in paper:
-                    if isinstance(paper['diatoms_data'], str):
-                        paper['diatoms_data'] = json.loads(paper['diatoms_data'])
+#             # Update corresponding entry in PAPER_JSON_FILES
+#             for paper in PAPER_JSON_FILES:
+#                 if 'diatoms_data' in paper:
+#                     if isinstance(paper['diatoms_data'], str):
+#                         paper['diatoms_data'] = json.loads(paper['diatoms_data'])
                     
-                    if paper['diatoms_data'].get('image_url') == current_image.get('image_url'):
-                        paper['diatoms_data'] = current_image
-                        break
+#                     if paper['diatoms_data'].get('image_url') == current_image.get('image_url'):
+#                         paper['diatoms_data'] = current_image
+#                         break
             
-            # Save updated data to GCS
-            success = ClaudeAI.update_and_save_papers(
-                PAPERS_JSON_PUBLIC_URL,
-                PAPER_JSON_FILES,
-                DIATOMS_DATA
-            )
+#             # Save updated data to GCS
+#             success = ClaudeAI.update_and_save_papers(
+#                 PAPERS_JSON_PUBLIC_URL,
+#                 PAPER_JSON_FILES,
+#                 DIATOMS_DATA
+#             )
             
-            if not success:
-                raise Exception("Failed to update papers data in GCS")
+#             if not success:
+#                 raise Exception("Failed to update papers data in GCS")
                 
-            return jsonify({
-                'success': True,
-                'message': 'Segmentation saved successfully',
-                'segmentation_url': segmentation_url,
-                'segmentation_indices_array': enhanced_indices
-            })
-        else:
-            raise ValueError(f"Invalid image index: {image_index}")
+#             return jsonify({
+#                 'success': True,
+#                 'message': 'Segmentation saved successfully',
+#                 'segmentation_url': segmentation_url,
+#                 'segmentation_indices_array': enhanced_indices
+#             })
+#         else:
+#             raise ValueError(f"Invalid image index: {image_index}")
             
-    except Exception as e:
-        logger.error(f"Error saving segmentation: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+#     except Exception as e:
+#         logger.error(f"Error saving segmentation: {str(e)}")
+#         return jsonify({
+#             'success': False,
+#             'error': str(e)
+#         }), 500
 
 @app.route('/api/update_segmentations', methods=['POST'])
 def update_segmentations():

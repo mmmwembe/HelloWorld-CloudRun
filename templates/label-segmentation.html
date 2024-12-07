@@ -4,327 +4,51 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Diatom Segmentation</title>
-    
-    <!-- External Dependencies -->
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    
-    <!-- Custom Styles -->
-    <style>
-        @keyframes slide-up {
-            from { transform: translateY(100%); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
-        .animate-slide-up {
-            animation: slide-up 0.3s ease-out;
-        }
-        circle {
-            transition: stroke-dashoffset 0.3s ease;
-        }
-    </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
-    // =====================================
-    // Utility Functions
-    // =====================================
-    
-    const calculatePolygonData = (points, imageWidth, imageHeight) => {
-        // Extract x and y coordinates
-        const denormXs = points.map(p => p.x);
-        const denormYs = points.map(p => p.y);
-        
-        // Calculate bounding points
-        const topLeft = {
-            x: Math.min(...denormXs),
-            y: Math.min(...denormYs)
-        };
-        
-        const bottomRight = {
-            x: Math.max(...denormXs),
-            y: Math.max(...denormYs)
-        };
-        
-        // Calculate dimensions
-        const width = bottomRight.x - topLeft.x;
-        const height = bottomRight.y - topLeft.y;
-        const centerX = topLeft.x + width / 2;
-        const centerY = topLeft.y + height / 2;
-        
-        // Create normalized points
-        const normalizedPoints = points.map(point => ({
-            x: point.x / imageWidth,
-            y: point.y / imageHeight
-        }));
-        
-        // Create YOLO format bbox
-        const yoloBBox = [
-            centerX / imageWidth,
-            centerY / imageHeight,
-            width / imageWidth,
-            height / imageHeight
-        ];
-        
-        return {
-            norm_polygon_points: normalizedPoints,
-            denorm_polygon_points: points,
-            denorm_xs: denormXs,
-            denorm_ys: denormYs,
-            denorm_top_left: topLeft,
-            denorm_bottom_right: bottomRight,
-            denorm_bbox: `${topLeft.x},${topLeft.y} ${bottomRight.x},${bottomRight.y}`,
-            denorm_calculated_yolobbox: yoloBBox,
-            image_width: imageWidth,
-            image_height: imageHeight
-        };
-    };
+        // DiatomeSelector Component
+        function DiatomeSelector({ selected, setSelected }) {
+            const options = [
+                { label: 'Incomplete Diatom', value: 0 },
+                { label: 'Complete Diatom', value: 1 },
+                { label: 'Fragment Diatom', value: 2 },
+                { label: 'Blurred Diatom', value: 3 },
+                { label: 'Diatom SideView', value: 4 }
+            ];
 
-    const generateSegmentationText = (polygons, imageWidth, imageHeight) => {
-        return polygons.map(polygon => {
-            const normalizedPoints = polygon.points.map(point => {
-                const x = point.x / imageWidth;
-                const y = point.y / imageHeight;
-                return `${x.toFixed(6)} ${y.toFixed(6)}`;
-            }).join(' ');
-            return `${polygon.label} ${normalizedPoints}`;
-        }).join('\n');
-    };
-
-    const parseSegmentationText = (text, imageWidth, imageHeight) => {
-        if (!text || !text.trim()) return [];
-        if (!imageWidth || !imageHeight) {
-            console.error('Missing dimensions:', { imageWidth, imageHeight });
-            return [];
-        }
-        
-        console.log('Parsing segmentation text:', {
-            textLength: text.length,
-            imageWidth,
-            imageHeight
-        });
-        
-        try {
-            return text.trim().split('\n').map(line => {
-                const [label, ...coords] = line.split(' ');
-                const points = [];
-                
-                for (let i = 0; i < coords.length; i += 2) {
-                    if (coords[i] && coords[i+1]) {
-                        const x = parseFloat(coords[i]);
-                        const y = parseFloat(coords[i+1]);
-                        
-                        if (isNaN(x) || isNaN(y)) {
-                            console.error('Invalid coordinates:', coords[i], coords[i+1]);
-                            continue;
-                        }
-                        
-                        points.push({
-                            x: x * imageWidth,
-                            y: y * imageHeight
-                        });
-                    }
-                }
-                
-                return {
-                    label: parseInt(label) || 0,
-                    points,
-                    color: getRandomColor()
-                };
-            }).filter(polygon => polygon.points.length >= 3);
-        } catch (error) {
-            console.error('Error parsing segmentation text:', error);
-            return [];
-        }
-    };
-
-    const getRandomColor = () => {
-        const colors = ['#2ecc71', '#e74c3c', '#3498db', '#f1c40f', '#9b59b6', '#1abc9c'];
-        return colors[Math.floor(Math.random() * colors.length)];
-    };
-
-// =====================================
-    // Component Definitions
-    // =====================================
-    
-    const CircularProgress = ({ progress }) => {
-        const radius = 20;
-        const circumference = 2 * Math.PI * radius;
-        const strokeDashoffset = circumference - (progress / 100) * circumference;
-        
-        return (
-            <svg className="transform -rotate-90 w-12 h-12">
-                <circle
-                    className="text-gray-300"
-                    strokeWidth="4"
-                    stroke="currentColor"
-                    fill="transparent"
-                    r={radius}
-                    cx="24"
-                    cy="24"
-                />
-                <circle
-                    className="text-green-500"
-                    strokeWidth="4"
-                    strokeDasharray={circumference}
-                    strokeDashoffset={strokeDashoffset}
-                    strokeLinecap="round"
-                    stroke="currentColor"
-                    fill="transparent"
-                    r={radius}
-                    cx="24"
-                    cy="24"
-                />
-                <text
-                    x="24"
-                    y="24"
-                    className="text-xs font-medium"
-                    fill="currentColor"
-                    textAnchor="middle"
-                    alignmentBaseline="middle"
-                    transform="rotate(90 24 24)"
-                >
-                    {Math.round(progress)}%
-                </text>
-            </svg>
-        );
-    };
-
-    const Toast = ({ message, onClose }) => {
-        React.useEffect(() => {
-            const timer = setTimeout(() => {
-                onClose();
-            }, 3000);
-            return () => clearTimeout(timer);
-        }, [onClose]);
-
-        return (
-            <div className="fixed bottom-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center space-x-2 animate-slide-up">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                </svg>
-                <span>{message}</span>
-            </div>
-        );
-    };
-
-    const DiatomSelector = ({ selected, setSelected }) => {
-        const options = [
-            { label: 'Incomplete Diatom', value: 0 },
-            { label: 'Complete Diatom', value: 1 },
-            { label: 'Fragment Diatom', value: 2 },
-            { label: 'Blurred Diatom', value: 3 },
-            { label: 'Diatom SideView', value: 4 }
-        ];
-
-        return (
-            <div className="p-4">
-                <div className="flex flex-wrap gap-6 items-center justify-center">
-                    {options.map((option) => (
-                        <label key={option.value} className="flex items-center space-x-2 cursor-pointer">
-                            <input
-                                type="radio"
-                                name="diatom-type"
-                                value={option.value}
-                                checked={selected === option.value}
-                                onChange={(e) => setSelected(Number(e.target.value))}
-                                className="w-4 h-4 text-blue-600 cursor-pointer"
-                            />
-                            <span className="text-sm font-medium text-gray-700">
-                                {option.label}
-                            </span>
-                        </label>
-                    ))}
+            return (
+                <div className="p-4">
+                    <div className="flex flex-wrap gap-6 items-center justify-center">
+                        {options.map((option) => (
+                            <label key={option.value} className="flex items-center space-x-2 cursor-pointer">
+                                <input
+                                    type="radio"
+                                    name="diatom-type"
+                                    value={option.value}
+                                    checked={selected === option.value}
+                                    onChange={(e) => setSelected(Number(e.target.value))}
+                                    className="w-4 h-4 text-blue-600 cursor-pointer"
+                                />
+                                <span className="text-sm font-medium text-gray-700">
+                                    {option.label}
+                                </span>
+                            </label>
+                        ))}
+                    </div>
                 </div>
-            </div>
-        );
-    };
+            );
+        }
+// File: components.js
 
-    const SegmentationButtons = ({ 
-        onSave, 
-        onUpdate, 
-        onDownload, 
-        isSaving, 
-        isUpdating,
-        saveProgress,
-        hasSegmentations 
-    }) => {
-        return (
-            <div className="flex justify-center space-x-4">
-                <button 
-                    onClick={onSave}
-                    disabled={isSaving}
-                    className={`
-                        px-8 py-3 rounded-lg font-bold transform transition-all duration-200
-                        flex items-center justify-center min-w-[120px]
-                        ${isSaving 
-                            ? 'bg-gray-400 cursor-not-allowed'
-                            : 'bg-green-600 text-white hover:bg-green-500 hover:scale-105 hover:shadow-lg'
-                        }
-                    `}
-                >
-                    {isSaving ? (
-                        <div className="flex items-center space-x-2">
-                            <CircularProgress progress={saveProgress} />
-                            <span className="text-white">Saving...</span>
-                        </div>
-                    ) : (
-                        <span>Save</span>
-                    )}
-                </button>
-
-                <button 
-                    onClick={onUpdate}
-                    disabled={!hasSegmentations || isUpdating}
-                    className={`
-                        px-8 py-3 rounded-lg font-bold transform transition-all duration-200
-                        flex items-center justify-center min-w-[180px]
-                        ${(!hasSegmentations || isUpdating)
-                            ? 'bg-gray-400 cursor-not-allowed'
-                            : 'bg-blue-600 text-white hover:bg-blue-500 hover:scale-105 hover:shadow-lg'
-                        }
-                    `}
-                >
-                    {isUpdating ? (
-                        <div className="flex items-center space-x-2">
-                            <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            <span>Updating...</span>
-                        </div>
-                    ) : (
-                        <div className="flex items-center space-x-2">
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                            </svg>
-                            <span>Update Segmentation Data</span>
-                        </div>
-                    )}
-                </button>
-
-                <button 
-                    onClick={onDownload}
-                    className="
-                        bg-yellow-400 text-black px-8 py-3 rounded-lg font-bold
-                        transform transition-all duration-200 
-                        hover:scale-105 hover:bg-yellow-300 hover:shadow-lg
-                        flex items-center space-x-2
-                    "
-                >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
-                    <span>Download</span>
-                </button>
-            </div>
-        );
-    };
-
-    const SegmentationList = ({ polygons, selectedIndex, onSelectSegment, getDiatomLabel }) => {
+        // SegmentationList Component with enhanced bbox display
+        function SegmentationList({ polygons, selectedIndex, onSelectSegment, getDiatomLabel }) {
             return (
                 <div className="mt-4 space-y-2 px-4">
                     {polygons.map((polygon, index) => (
@@ -346,720 +70,721 @@
                                     style={{ backgroundColor: polygon.color }}
                                 />
                             </div>
-                            
-                            {selectedIndex === index && (
-                            <div className="mt-2 text-sm opacity-80">
-                                <div>Points: {polygon.points.length}</div>
-                                {polygon.denorm_bbox && (
-                                    <div>Bbox: {polygon.denorm_bbox}</div>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                ))}
-            </div>
-        );
-    };
-
-    const Sidebar = ({ polygons, selectedIndex, onSelectSegment, getDiatomLabel }) => {
-        return (
-            <div className="w-96 bg-gray-800 fixed right-0 h-full overflow-y-auto">
-                <div className="text-2xl font-bold text-white text-center py-5 border-b border-gray-700">
-                    Polygons ({polygons.length})
+                            {polygon.denorm_bbox && (
+                                <div className="mt-2 text-xs font-mono opacity-75">
+                                    BBox: {polygon.denorm_bbox}
+                                </div>
+                            )}
+                        </div>
+                    ))}
                 </div>
-                
-                <div className="p-4 text-white">
-                    <p>Instructions:</p>
-                    <ul className="list-disc pl-5 space-y-2 mt-2">
-                        <li>Click to start drawing a polygon</li>
-                        <li>Click to add points to the polygon</li>
-                        <li>Click near the start point to close the polygon</li>
-                        <li>Press ESC to cancel current polygon</li>
-                        <li>Click on a segmentation in the list to highlight it</li>
-                    </ul>
+            );
+        }
+
+        // CircularProgress Component
+        function CircularProgress({ progress }) {
+            const radius = 20;
+            const circumference = 2 * Math.PI * radius;
+            const strokeDashoffset = circumference - (progress / 100) * circumference;
+            
+            return (
+                <svg className="transform -rotate-90 w-12 h-12">
+                    <circle
+                        className="text-gray-300"
+                        strokeWidth="4"
+                        stroke="currentColor"
+                        fill="transparent"
+                        r={radius}
+                        cx="24"
+                        cy="24"
+                    />
+                    <circle
+                        className="text-green-500"
+                        strokeWidth="4"
+                        strokeDasharray={circumference}
+                        strokeDashoffset={strokeDashoffset}
+                        strokeLinecap="round"
+                        stroke="currentColor"
+                        fill="transparent"
+                        r={radius}
+                        cx="24"
+                        cy="24"
+                    />
+                </svg>
+            );
+        }
+
+        // Toast Component
+        function Toast({ message, onClose }) {
+            React.useEffect(() => {
+                const timer = setTimeout(() => {
+                    onClose();
+                }, 3000);
+                return () => clearTimeout(timer);
+            }, [onClose]);
+
+            return (
+                <div className="fixed bottom-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center space-x-2 animate-slide-up">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span>{message}</span>
                 </div>
-                
-                <SegmentationList 
-                    polygons={polygons}
-                    selectedIndex={selectedIndex}
-                    onSelectSegment={onSelectSegment}
-                    getDiatomLabel={getDiatomLabel}
-                />
-            </div>
-        );
-    };
+            );
+        }
 
-    const Canvas = ({
-        imageUrl,
-        polygons,
-        currentPolygon,
-        selectedSegmentIndex,
-        isDrawing,
-        onCanvasClick,
-        onMouseMove,
-        getDiatomLabel,
-        containerRef,
-        canvasRef,
-        imageRef,
-        onImageLoad
-    }) => {
+        // File: polygon-utils.js
 
-        const drawPolygons = () => {
-            const canvas = canvasRef.current;
-            if (!canvas) return;
+        // Polygon calculation utilities
+        const calculatePolygonMetrics = (points, imageWidth, imageHeight) => {
+            // Extract x and y coordinates
+            const xs = points.map(p => p.x);
+            const ys = points.map(p => p.y);
+            
+            // Calculate normalized points (without label)
+            const norm_points = points.map(p => ({
+                x: p.x / imageWidth,
+                y: p.y / imageHeight
+            }));
 
-            const ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            // Draw completed polygons and their bounding boxes
-            polygons.forEach((polygon, index) => {
-                if (!polygon.points || polygon.points.length < 3) return;
-
-                // Draw the polygon
-                ctx.beginPath();
-                ctx.moveTo(polygon.points[0].x, polygon.points[0].y);
-                for (let i = 1; i < polygon.points.length; i++) {
-                    ctx.lineTo(polygon.points[i].x, polygon.points[i].y);
-                }
-                ctx.closePath();
-                
-                const isSelected = index === selectedSegmentIndex;
-                
-                if (isSelected) {
-                    ctx.strokeStyle = '#ffffff';
-                    ctx.lineWidth = 4;
-                    ctx.stroke();
-                    
-                    ctx.strokeStyle = polygon.color;
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
-                    
-                    ctx.fillStyle = `${polygon.color}80`;
-                } else {
-                    ctx.strokeStyle = polygon.color;
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
-                    
-                    ctx.fillStyle = `${polygon.color}40`;
-                }
-                ctx.fill();
-
-                // Draw bounding box if it exists
-                if (polygon.denorm_bbox) {
-                    try {
-                        const [topLeft, bottomRight] = polygon.denorm_bbox.split(' ').map(point => {
-                            const [x, y] = point.split(',');
-                            return { 
-                                x: parseFloat(x), 
-                                y: parseFloat(y) 
-                            };
-                        });
-
-                        if (!isNaN(topLeft.x) && !isNaN(topLeft.y) && 
-                            !isNaN(bottomRight.x) && !isNaN(bottomRight.y)) {
-                            ctx.beginPath();
-                            ctx.strokeStyle = isSelected ? '#ffffff' : polygon.color;
-                            ctx.setLineDash([5, 5]); // Make the bbox dashed
-                            ctx.lineWidth = 1;
-                            ctx.rect(
-                                topLeft.x,
-                                topLeft.y,
-                                bottomRight.x - topLeft.x,
-                                bottomRight.y - topLeft.y
-                            );
-                            ctx.stroke();
-                            ctx.setLineDash([]); // Reset line style
-                        }
-                    } catch (e) {
-                        console.error('Error drawing bbox:', e);
-                    }
-                }
-                
-                if (isSelected) {
-                    const centerX = polygon.points.reduce((sum, p) => sum + p.x, 0) / polygon.points.length;
-                    const centerY = polygon.points.reduce((sum, p) => sum + p.y, 0) / polygon.points.length;
-                    
-                    ctx.font = '14px Arial';
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillStyle = '#ffffff';
-                    ctx.strokeStyle = '#000000';
-                    ctx.lineWidth = 3;
-                    
-                    const text = `${index + 1}. ${getDiatomLabel(polygon.label)}`;
-                    ctx.strokeText(text, centerX, centerY);
-                    ctx.fillText(text, centerX, centerY);
-                }
-            });
-
-            // Draw current polygon
-            if (currentPolygon.length > 0) {
-                ctx.beginPath();
-                ctx.moveTo(currentPolygon[0].x, currentPolygon[0].y);
-                for (let i = 1; i < currentPolygon.length; i++) {
-                    ctx.lineTo(currentPolygon[i].x, currentPolygon[i].y);
-                }
-                if (isDrawing) {
-                    ctx.lineTo(currentPolygon[currentPolygon.length - 1].x, currentPolygon[currentPolygon.length - 1].y);
-                }
-                
-                ctx.strokeStyle = '#2ecc71';
-                ctx.lineWidth = 2;
-                ctx.stroke();
-            }
+            // Calculate denormalized values
+            const denorm_xs = xs;
+            const denorm_ys = ys;
+            
+            // Calculate bounding box points
+            const top_left = {
+                x: Math.min(...xs),
+                y: Math.min(...ys)
+            };
+            
+            const bottom_right = {
+                x: Math.max(...xs),
+                y: Math.max(...ys)
+            };
+            
+            // Calculate YOLO format bbox (x_center, y_center, width, height)
+            const width = bottom_right.x - top_left.x;
+            const height = bottom_right.y - top_left.y;
+            const x_center = top_left.x + width / 2;
+            const y_center = top_left.y + height / 2;
+            
+            const yolo_bbox = {
+                x_center: x_center / imageWidth,
+                y_center: y_center / imageHeight,
+                width: width / imageWidth,
+                height: height / imageHeight
+            };
+            
+            return {
+                norm_polygon_points: norm_points,
+                denorm_polygon_points: points,
+                denorm_xs,
+                denorm_ys,
+                denorm_top_left: top_left,
+                denorm_bottom_right: bottom_right,
+                denorm_bbox: `${Math.round(top_left.x)},${Math.round(top_left.y)} ${Math.round(bottom_right.x)},${Math.round(bottom_right.y)}`,
+                denorm_calculated_yolobbox: Object.values(yolo_bbox).map(v => v.toFixed(6)).join(' '),
+                image_width: imageWidth,
+                image_height: imageHeight
+            };
         };
 
+        // Main DiatomSegmenter Component - Initial Setup
+        function DiatomSegmenter() {
+            // State declarations
+            const [imageIndex, setImageIndex] = React.useState(0);
+            const [totalImages, setTotalImages] = React.useState(0);
+            const [polygons, setPolygons] = React.useState([]);
+            const [currentPolygon, setCurrentPolygon] = React.useState([]);
+            const [isDrawing, setIsDrawing] = React.useState(false);
+            const [imageUrl, setImageUrl] = React.useState('');
+            const [isSaving, setIsSaving] = React.useState(false);
+            const [saveProgress, setSaveProgress] = React.useState(0);
+            const [showToast, setShowToast] = React.useState(false);
+            const [selectedType, setSelectedType] = React.useState(1);
+            const [imageData, setImageData] = React.useState(null);
+            const [pendingSegmentationData, setPendingSegmentationData] = React.useState(null);
+            const [selectedSegmentIndex, setSelectedSegmentIndex] = React.useState(null);
+            
+            // Refs
+            const canvasRef = React.useRef(null);
+            const imageRef = React.useRef(null);
+            const containerRef = React.useRef(null);
 
-        React.useEffect(() => {
-            drawPolygons();
-        }, [polygons, currentPolygon, selectedSegmentIndex]);
+            // Utility functions
+            const getRandomColor = () => {
+                const colors = ['#2ecc71', '#e74c3c', '#3498db', '#f1c40f', '#9b59b6', '#1abc9c'];
+                return colors[Math.floor(Math.random() * colors.length)];
+            };
 
-        return (
-            <div 
-                ref={containerRef}
-                className="relative w-full max-w-4xl mt-4"
-            >
-                <img
-                    ref={imageRef}
-                    src={imageUrl}
-                    alt="Diatom"
-                    className="w-full"
+            const getDiatomLabel = (value) => {
+                const labels = {
+                    0: 'Incomplete Diatom',
+                    1: 'Complete Diatom',
+                    2: 'Fragment Diatom',
+                    3: 'Blurred Diatom',
+                    4: 'Diatom SideView'
+                };
+                return labels[value] || 'Unknown';
+            };
 
-                    onLoad={() => {
-                        const canvas = canvasRef.current;
-                        const container = containerRef.current;
-                        const image = imageRef.current;
-                        
-                        if (canvas && container && image) {
-                            console.log('Setting canvas dimensions:', {
-                                imageWidth: image.naturalWidth,
-                                imageHeight: image.naturalHeight,
-                                containerWidth: container.offsetWidth,
-                                containerHeight: container.offsetHeight
-                            });
-                            canvas.width = image.naturalWidth;
-                            canvas.height = image.naturalHeight;
-                            canvas.style.width = '100%';
-                            canvas.style.height = 'auto';
-                            onImageLoad?.();
-                            console.log('Drawing polygons:', polygons);
-                            drawPolygons();
-                        }
-                    }}
-                />
-                <canvas
-                    ref={canvasRef}
-                    className="absolute top-0 left-0 w-full h-full cursor-crosshair"
-                    onClick={onCanvasClick}
-                    onMouseMove={onMouseMove}
-                />
-            </div>
-        );
-    };
+    // File: data-handlers.js
 
-    const App = () => {
-        // State declarations
-        const [imageIndex, setImageIndex] = React.useState(0);
-        const [totalImages, setTotalImages] = React.useState(0);
-        const [polygons, setPolygons] = React.useState([]);
-        const [currentPolygon, setCurrentPolygon] = React.useState([]);
-        const [isDrawing, setIsDrawing] = React.useState(false);
-        const [imageUrl, setImageUrl] = React.useState('');
-        const [isSaving, setIsSaving] = React.useState(false);
-        const [isUpdating, setIsUpdating] = React.useState(false);
-        const [saveProgress, setSaveProgress] = React.useState(0);
-        const [showToast, setShowToast] = React.useState(false);
-        const [toastMessage, setToastMessage] = React.useState('');
-        const [selectedType, setSelectedType] = React.useState(1);
-        const [imageData, setImageData] = React.useState(null);
-        const [selectedSegmentIndex, setSelectedSegmentIndex] = React.useState(null);
-        const [error, setError] = React.useState(null);
-
-        // Refs
-        const canvasRef = React.useRef(null);
-        const imageRef = React.useRef(null);
-        const containerRef = React.useRef(null);
-
-        // Load image data
-        React.useEffect(() => {
-            loadImageData(imageIndex);
-        }, [imageIndex]);
-
-
-        const loadImageData = async (index) => {
-            try {
-                const response = await fetch(`/api/diatoms?index=${index}`);
-                const data = await response.json();
+    const parseSegmentationFile = (content, imageWidth, imageHeight) => {
+                if (!content.trim()) return [];
                 
-                if (data.error) {
-                    setError(data.error);
+                const lines = content.trim().split('\n');
+                return lines.map(line => {
+                    const [label, ...coords] = line.split(' ');
+                    const points = [];
+                    for (let i = 0; i < coords.length; i += 2) {
+                        if (coords[i] && coords[i+1]) {
+                            const x = parseFloat(coords[i]) * imageWidth;
+                            const y = parseFloat(coords[i + 1]) * imageHeight;
+                            points.push({ x, y });
+                        }
+                    }
+                    
+                    // Only create polygon if it has at least 4 points
+                    if (points.length >= 4) {
+                        const polygon = {
+                            label: parseInt(label),
+                            points,
+                            color: getRandomColor()
+                        };
+                        
+                        Object.assign(polygon, calculatePolygonMetrics(points, imageWidth, imageHeight));
+                        return polygon;
+                    }
+                    return null;
+                }).filter(Boolean);
+            };
+
+            const generateSegmentationTextFromPolygons = (polygonArray) => {
+                const image = imageRef.current;
+                if (!image) return '';
+                
+                const imageWidth = image.naturalWidth;
+                const imageHeight = image.naturalHeight;
+                
+                return polygonArray.map(polygon => {
+                    if (polygon.points.length < 4) return '';
+                    
+                    const normalizedPoints = polygon.points.map(point => {
+                        const normalizedX = point.x / imageWidth;
+                        const normalizedY = point.y / imageHeight;
+                        return `${normalizedX.toFixed(6)} ${normalizedY.toFixed(6)}`;
+                    }).join(' ');
+                    
+                    return `${polygon.label} ${normalizedPoints}`;
+                }).filter(Boolean).join('\n');
+            };
+
+            const loadImageData = async (index) => {
+                try {
+                    const response = await fetch(`/api/diatoms?index=${index}`);
+                    const data = await response.json();
+                    if (data.error) {
+                        console.error('API Error:', data.error);
+                        return;
+                    }
+                    
+                    setImageUrl(data.data.image_url);
+                    setImageData(data.data);
+                    setTotalImages(data.total_images);
+                    setImageIndex(data.current_index);
+                    setSelectedSegmentIndex(null);
+                    
+                    if (data.data.segmentation_url) {
+                        try {
+                            const segResponse = await fetch(
+                                `/api/get_segmentation?url=${encodeURIComponent(data.data.segmentation_url)}&image_index=${index}`
+                            );
+                            if (!segResponse.ok) {
+                                throw new Error('Failed to fetch segmentation data');
+                            }
+                            const segData = await segResponse.json();
+                            
+                            setPendingSegmentationData(segData.annotations);
+                            
+                            if (segData.segmentation_indices_array) {
+                                setImageData(prev => ({
+                                    ...prev,
+                                    segmentation_indices_array: segData.segmentation_indices_array
+                                }));
+                            }
+                        } catch (error) {
+                            console.error('Error loading segmentation data:', error);
+                            setPendingSegmentationData(null);
+                            setPolygons([]);
+                        }
+                    } else {
+                        setPendingSegmentationData(null);
+                        setPolygons([]);
+                    }
+                } catch (error) {
+                    console.error('Error loading image data:', error);
+                }
+            };
+
+    // File: drawing-functions.js
+    const drawPolygons = () => {
+                const canvas = canvasRef.current;
+                if (!canvas) return;
+
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                // Draw completed polygons
+                polygons.forEach((polygon, index) => {
+                    if (polygon.points.length < 4) return;
+
+                    // Draw the segmentation polygon
+                    ctx.beginPath();
+                    ctx.moveTo(polygon.points[0].x, polygon.points[0].y);
+                    for (let i = 1; i < polygon.points.length; i++) {
+                        ctx.lineTo(polygon.points[i].x, polygon.points[i].y);
+                    }
+                    ctx.closePath();
+                    
+                    const isSelected = index === selectedSegmentIndex;
+                    
+                    if (isSelected) {
+                        ctx.strokeStyle = '#ffffff';
+                        ctx.lineWidth = 4;
+                        ctx.stroke();
+                        
+                        ctx.strokeStyle = polygon.color;
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+                        
+                        ctx.fillStyle = `${polygon.color}80`;
+                    } else {
+                        ctx.strokeStyle = polygon.color;
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+                        
+                        ctx.fillStyle = `${polygon.color}40`;
+                    }
+                    ctx.fill();
+
+                    // Draw the bounding box
+                    if (polygon.denorm_top_left && polygon.denorm_bottom_right) {
+                        ctx.beginPath();
+                        ctx.strokeStyle = isSelected ? '#ffffff' : '#ff0000';
+                        ctx.lineWidth = 1;
+                        ctx.setLineDash([5, 5]); // Makes the line dashed
+                        
+                        const { x: x1, y: y1 } = polygon.denorm_top_left;
+                        const { x: x2, y: y2 } = polygon.denorm_bottom_right;
+                        const width = x2 - x1;
+                        const height = y2 - y1;
+                        
+                        ctx.strokeRect(x1, y1, width, height);
+                        ctx.setLineDash([]); // Reset to solid line
+                    }
+
+                    if (isSelected) {
+                        const centerX = polygon.points.reduce((sum, p) => sum + p.x, 0) / polygon.points.length;
+                        const centerY = polygon.points.reduce((sum, p) => sum + p.y, 0) / polygon.points.length;
+                        
+                        ctx.font = '14px Arial';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillStyle = '#ffffff';
+                        ctx.strokeStyle = '#000000';
+                        ctx.lineWidth = 3;
+                        
+                        const text = `${index + 1}. ${getDiatomLabel(polygon.label)}`;
+                        ctx.strokeText(text, centerX, centerY);
+                        ctx.fillText(text, centerX, centerY);
+                    }
+                });
+
+                // Draw current polygon
+                if (currentPolygon.length > 0) {
+                    ctx.beginPath();
+                    ctx.moveTo(currentPolygon[0].x, currentPolygon[0].y);
+                    for (let i = 1; i < currentPolygon.length; i++) {
+                        ctx.lineTo(currentPolygon[i].x, currentPolygon[i].y);
+                    }
+                    if (isDrawing) {
+                        ctx.lineTo(currentPolygon[currentPolygon.length - 1].x, currentPolygon[currentPolygon.length - 1].y);
+                    }
+                    
+                    ctx.strokeStyle = '#2ecc71';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+            };
+
+            const handleCanvasClick = async (e) => {
+                const rect = canvasRef.current.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+
+                if (!isDrawing) {
+                    setIsDrawing(true);
+                    setCurrentPolygon([{ x, y }]);
+                } else {
+                    const startPoint = currentPolygon[0];
+                    const distance = Math.sqrt(
+                        Math.pow(x - startPoint.x, 2) + Math.pow(y - startPoint.y, 2)
+                    );
+
+                    if (distance < 20) {
+                        // Only close polygon if it will have at least 4 points
+                        if (currentPolygon.length >= 3) {
+                            const image = imageRef.current;
+                            const newPolygon = {
+                                label: selectedType,
+                                points: currentPolygon,
+                                color: getRandomColor(),
+                                ...calculatePolygonMetrics(currentPolygon, image.naturalWidth, image.naturalHeight)
+                            };
+                            
+                            const updatedPolygons = [...polygons, newPolygon];
+                            setPolygons(updatedPolygons);
+                            setCurrentPolygon([]);
+                            setIsDrawing(false);
+                            
+                            await handleAutoSave(updatedPolygons);
+                        } else {
+                            alert('A polygon must have at least 4 points. Please continue adding points.');
+                        }
+                    } else {
+                        setCurrentPolygon([...currentPolygon, { x, y }]);
+                    }
+                }
+            };
+
+    // File: react-effects.js
+    const handleImageLoad = () => {
+                const canvas = canvasRef.current;
+                const container = containerRef.current;
+                const image = imageRef.current;
+                
+                if (canvas && container && image) {
+                    canvas.width = container.offsetWidth;
+                    canvas.height = container.offsetHeight;
+                    
+                    if (pendingSegmentationData) {
+                        const loadedPolygons = parseSegmentationFile(
+                            pendingSegmentationData,
+                            image.naturalWidth,
+                            image.naturalHeight
+                        );
+                        setPolygons(loadedPolygons);
+                        setPendingSegmentationData(null);
+                    }
+                    
+                    drawPolygons();
+                }
+            };
+
+            const handleAutoSave = async (updatedPolygons) => {
+                // Filter out polygons with less than 4 points
+                const validPolygons = updatedPolygons.filter(polygon => polygon.points.length >= 4);
+                
+                if (validPolygons.length === 0) {
+                    alert('No valid polygons to save. Each polygon must have at least 4 points.');
                     return;
                 }
 
-                // Wait for image to load to get actual dimensions
-                const img = new Image();
-                img.src = data.data.image_url;
-                await new Promise((resolve, reject) => {
-                    img.onload = resolve;
-                    img.onerror = reject;
-                });
+                setIsSaving(true);
+                setSaveProgress(0);
+                
+                const progressInterval = setInterval(() => {
+                    setSaveProgress(prev => Math.min(prev + 10, 90));
+                }, 100);
 
-                // Update image data with actual dimensions
-                const imageDataWithDimensions = {
-                    ...data.data,
-                    image_width: img.naturalWidth,
-                    image_height: img.naturalHeight
-                };
-
-                setImageUrl(data.data.image_url);
-                setImageData(imageDataWithDimensions);
-                setTotalImages(data.total_images);
-                setImageIndex(data.current_index);
-                setSelectedSegmentIndex(null);
-
-                if (data.data.segmentation_url) {
-                    try {
-                        const segResponse = await fetch(
-                            `/api/get_segmentation?url=${encodeURIComponent(data.data.segmentation_url)}&image_index=${index}`
-                        );
-                        
-                        if (!segResponse.ok) {
-                            throw new Error('Failed to fetch segmentation data');
-                        }
-                        
-                        const segData = await segResponse.json();
-                        console.log('Loaded segmentation data:', segData);
-
-                        // First try to use segmentation_indices_array
-                        if (segData.segmentation_indices_array?.length > 0) {
-                            const validPolygons = segData.segmentation_indices_array
-                                .filter(segment => {
-                                    // Validate the segment has points
-                                    if (!segment.points?.length) {
-                                        console.log('Segment missing points:', segment);
-                                        return false;
-                                    }
-
-                                    // Validate each point has valid x,y coordinates
-                                    const validPoints = segment.points.every(point => 
-                                        point && 
-                                        typeof point.x === 'number' && 
-                                        typeof point.y === 'number' && 
-                                        !isNaN(point.x) && 
-                                        !isNaN(point.y)
-                                    );
-
-                                    if (!validPoints) {
-                                        console.log('Segment has invalid points:', segment);
-                                        return false;
-                                    }
-
-                                    return true;
-                                })
-                                .map(segment => {
-                                    // Start with existing data
-                                    let polygon = {
-                                        ...segment,
-                                        color: segment.color || getRandomColor()
-                                    };
-
-                                    // If denorm_polygon_points exist, use them
-                                    if (segment.denorm_polygon_points?.length) {
-                                        polygon.points = segment.denorm_polygon_points;
-                                    }
-
-                                    // If we don't have enhanced data, calculate it
-                                    if (!segment.denorm_bbox) {
-                                        const enhancedData = calculatePolygonData(
-                                            polygon.points,
-                                            img.naturalWidth,
-                                            img.naturalHeight
-                                        );
-                                        polygon = { ...polygon, ...enhancedData };
-                                    }
-
-                                    return polygon;
-                                });
-
-                            console.log('Valid polygons to display:', validPolygons);
-                            if (validPolygons.length > 0) {
-                                setPolygons(validPolygons);
-                                return; // Exit if we successfully loaded polygons
-                            }
-                        }
-
-                        // Try parsing annotations if indices didn't work
-                        if (segData.annotations && 
-                            typeof segData.annotations === 'string' && 
-                            segData.annotations.trim() && 
-                            !segData.annotations.includes('0.000000 0.000000')) {
-                            
-                            const processedPolygons = parseSegmentationText(
-                                segData.annotations,
-                                img.naturalWidth,
-                                img.naturalHeight
-                            );
-
-                            if (processedPolygons.length > 0) {
-                                const enhancedPolygons = processedPolygons.map(polygon => ({
-                                    ...polygon,
-                                    ...calculatePolygonData(
-                                        polygon.points,
-                                        img.naturalWidth,
-                                        img.naturalHeight
-                                    )
-                                }));
-                                console.log('Processed polygons from annotations:', enhancedPolygons);
-                                setPolygons(enhancedPolygons);
-                                return;
-                            }
-                        }
-
-                        console.log('No valid segmentation data found');
-                        setPolygons([]);
-                    } catch (error) {
-                        console.error('Error loading segmentation data:', error);
-                        setError('Failed to load segmentation data');
-                        setPolygons([]);
+                try {
+                    const image = imageRef.current;
+                    const imageWidth = image.naturalWidth;
+                    const imageHeight = image.naturalHeight;
+                    
+                    const segmentationText = generateSegmentationTextFromPolygons(validPolygons);
+                    const imageFileName = imageUrl.split('/').pop().replace(/\.[^/.]+$/, '');
+                    
+                    const segmentationIndices = validPolygons.map((polygon, index) => {
+                        const metrics = calculatePolygonMetrics(polygon.points, imageWidth, imageHeight);
+                        return {
+                            index: index,
+                            label: polygon.label,
+                            points_count: polygon.points.length,
+                            label_text: getDiatomLabel(polygon.label),
+                            ...metrics
+                        };
+                    });
+                    
+                    const response = await fetch('/api/save_segmentation', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            image_index: imageIndex,
+                            segmentation_data: segmentationText,
+                            image_filename: imageFileName,
+                            segmentation_indices: segmentationIndices
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    clearInterval(progressInterval);
+                    setSaveProgress(100);
+                    
+                    if (data.success) {
+                        setShowToast(true);
+                        setImageData(prev => ({
+                            ...prev,
+                            segmentation_url: data.segmentation_url,
+                            segmentation_indices_array: data.segmentation_indices_array
+                        }));
+                    } else {
+                        throw new Error(data.error || 'Failed to save segmentation');
                     }
-                } else {
-                    setPolygons([]);
+                } catch (error) {
+                    console.error('Error in auto-save:', error);
+                    alert('Auto-save failed: ' + error.message);
+                } finally {
+                    setTimeout(() => {
+                        setIsSaving(false);
+                        setSaveProgress(0);
+                    }, 500);
                 }
-            } catch (error) {
-                setError('Failed to load image data');
-                console.error('Error:', error);
-                setPolygons([]);
-            }
-        };
+            };
 
-        const handleUpdateSegmentations = async () => {
-            setIsUpdating(true);
-            setError(null);
-            
-            try {
-                const response = await fetch('/api/update_segmentations', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ image_index: imageIndex })
-                });
-                
-                const data = await response.json();
-                
-                if (!data.success) {
-                    throw new Error(data.error || 'Update failed');
-                }
-                
-                setToastMessage(`Successfully updated ${data.updated_count} segmentations`);
-                setShowToast(true);
-                
-                await loadImageData(imageIndex);
-                
-            } catch (error) {
-                setError(error.message || 'Failed to update segmentations');
-            } finally {
-                setIsUpdating(false);
-            }
-        };
+            const handleSave = () => handleAutoSave(polygons);
 
+            const handlePrevious = () => {
+                setImageIndex(prev => Math.max(0, prev - 1));
+            };
 
-        const handleCanvasClick = async (e) => {
-            const canvas = canvasRef.current;
-            const rect = canvas.getBoundingClientRect();
-            
-            // Calculate the scaling factors
-            const scaleX = canvas.width / rect.width;
-            const scaleY = canvas.height / rect.height;
-            
-            // Get click coordinates relative to the canvas
-            const x = (e.clientX - rect.left) * scaleX;
-            const y = (e.clientY - rect.top) * scaleY;
+            const handleNext = () => {
+                setImageIndex(prev => Math.min(totalImages - 1, prev + 1));
+            };
 
-            if (!isDrawing) {
-                setIsDrawing(true);
-                setCurrentPolygon([{ x, y }]);
-            } else {
-                const startPoint = currentPolygon[0];
-                const distance = Math.sqrt(
-                    Math.pow(x - startPoint.x, 2) + Math.pow(y - startPoint.y, 2)
-                );
+            const handleMouseMove = (e) => {
+                if (!isDrawing) return;
+                drawPolygons();
+            };
 
-                if (distance < 20 && currentPolygon.length > 2) {
-                    const newPolygon = {
-                        label: selectedType,
-                        points: currentPolygon,
-                        color: getRandomColor()
-                    };
-                    
-                    // Calculate enhanced data before saving
-                    const enhancedPolygon = {
-                        ...newPolygon,
-                        ...calculatePolygonData(
-                            newPolygon.points,
-                            imageData.image_width,
-                            imageData.image_height
-                        )
-                    };
-                    
-                    const updatedPolygons = [...polygons, enhancedPolygon];
-                    setPolygons(updatedPolygons);
+            const handleKeyPress = (e) => {
+                if (e.key === 'Escape' && isDrawing) {
                     setCurrentPolygon([]);
                     setIsDrawing(false);
-                    
-                    await handleSave(updatedPolygons);
-                } else {
-                    setCurrentPolygon([...currentPolygon, { x, y }]);
+                    drawPolygons();
                 }
-            }
-        };
+            };
 
+            const handleSelectSegment = (index) => {
+                setSelectedSegmentIndex(index === selectedSegmentIndex ? null : index);
+            };
 
-        const handleSave = async (polygonsToSave = polygons) => {
-            setIsSaving(true);
-            setSaveProgress(0);
-            setError(null);
-            
-            const progressInterval = setInterval(() => {
-                setSaveProgress(prev => Math.min(prev + 10, 90));
-            }, 100);
+    // File: render-ui.js
+    React.useEffect(() => {
+                document.addEventListener('keydown', handleKeyPress);
+                return () => {
+                    document.removeEventListener('keydown', handleKeyPress);
+                };
+            }, [isDrawing]);
 
-            try {
-                const imageFileName = imageUrl.split('/').pop().replace(/\.[^/.]+$/, '');
-                
-                // Calculate enhanced data for each polygon
-                const enhancedPolygons = polygonsToSave.map(polygon => {
-                    const enhancedData = calculatePolygonData(
-                        polygon.points,
-                        imageData.image_width,
-                        imageData.image_height
-                    );
-                    
-                    return {
-                        ...polygon,
-                        ...enhancedData
-                    };
-                });
+            React.useEffect(() => {
+                loadImageData(imageIndex);
+            }, [imageIndex]);
 
-                const response = await fetch('/api/save_segmentation', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        image_index: imageIndex,
-                        segmentation_data: generateSegmentationText(
-                            enhancedPolygons,
-                            imageData.image_width,
-                            imageData.image_height
-                        ),
-                        image_filename: imageFileName,
-                        segmentation_indices: enhancedPolygons
-                    })
-                });
-                
-                const data = await response.json();
-                
-                clearInterval(progressInterval);
-                setSaveProgress(100);
-                
-                if (data.success) {
-                    setToastMessage('Segmentation saved successfully!');
-                    setShowToast(true);
-                    setImageData(prev => ({
-                        ...prev,
-                        segmentation_url: data.segmentation_url,
-                        segmentation_indices_array: data.segmentation_indices_array
-                    }));
-                } else {
-                    throw new Error(data.error || 'Save failed');
+            React.useEffect(() => {
+                if (pendingSegmentationData && imageRef.current) {
+                    handleImageLoad();
                 }
-            } catch (error) {
-                setError(error.message || 'Failed to save segmentation');
-            } finally {
-                setTimeout(() => {
-                    setIsSaving(false);
-                    setSaveProgress(0);
-                }, 500);
-            }
-        };
+            }, [pendingSegmentationData]);
 
-        const getDiatomLabel = (value) => {
-            const labels = {
-                0: 'Incomplete Diatom',
-                1: 'Complete Diatom',
-                2: 'Fragment Diatom',
-                3: 'Blurred Diatom',
-                4: 'Diatom SideView'
-            };
-            return labels[value] || 'Unknown';
-        };
+            React.useEffect(() => {
+                drawPolygons();
+            }, [polygons, currentPolygon, selectedSegmentIndex]);
 
-        const handleKeyPress = (e) => {
-            if (e.key === 'Escape' && isDrawing) {
-                setCurrentPolygon([]);
-                setIsDrawing(false);
-            }
-        };
+            React.useEffect(() => {
+                const image = imageRef.current;
+                if (image && image.complete && pendingSegmentationData) {
+                    handleImageLoad();
+                }
+            }, [imageUrl, pendingSegmentationData]);
 
-        React.useEffect(() => {
-            document.addEventListener('keydown', handleKeyPress);
-            return () => {
-                document.removeEventListener('keydown', handleKeyPress);
-            };
-        }, [isDrawing]);
-
-        const handlePrevious = () => {
-            setImageIndex(prev => Math.max(0, prev - 1));
-        };
-
-        const handleNext = () => {
-            setImageIndex(prev => Math.min(totalImages - 1, prev + 1));
-        };
-
-        const handleMouseMove = (e) => {
-            if (!isDrawing || !canvasRef.current) return;
-            
-            // Get current state of canvas and drawing
-            const canvas = canvasRef.current;
-            const ctx = canvas.getContext('2d');
-            
-            // Clear and redraw
-            drawPolygons();
-
-            // Draw current polygon path
-            if (currentPolygon.length > 0) {
-                const rect = canvas.getBoundingClientRect();
-                const scaleX = canvas.width / rect.width;
-                const scaleY = canvas.height / rect.height;
-                
-                ctx.beginPath();
-                ctx.moveTo(currentPolygon[0].x, currentPolygon[0].y);
-                currentPolygon.forEach(point => {
-                    ctx.lineTo(point.x, point.y);
-                });
-                
-                // Draw line to current mouse position
-                const mouseX = (e.clientX - rect.left) * scaleX;
-                const mouseY = (e.clientY - rect.top) * scaleY;
-                ctx.lineTo(mouseX, mouseY);
-                
-                ctx.strokeStyle = '#2ecc71';
-                ctx.lineWidth = 2;
-                ctx.stroke();
-            }
-        };
-
-        return (
-            <div className="flex h-screen bg-gray-200">
-                {/* Left Sidebar */}
-                <div className="w-64 bg-gray-800 fixed h-full">
-                    <img 
-                        src="/static/diatomhub-images/logo/diatom_hub_5e.svg" 
-                        alt="DiatomHub Logo" 
-                        className="w-4/5 mx-auto mt-5"
-                    />
-                    
-                    <div className="flex flex-col gap-3 px-4 mt-6">
-                        <a href="/modules" 
-                           className="px-4 py-3 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors duration-200">
-                            View Installed Modules
-                        </a>
-                        <a href="/all_papers" 
-                           className="px-4 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-md hover:bg-white/10 transition-colors duration-200">
-                            View Papers
-                        </a>
-                        <a href="/diatoms_data" 
-                           className="px-4 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-md hover:bg-white/10 transition-colors duration-200">
-                            View Diatoms Data
-                        </a>
-                        <a href="/label" 
-                           className="px-4 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-md hover:bg-white/10 transition-colors duration-200">
-                            Label Images
-                        </a>
-                    </div>
-                </div>
-
-                {/* Main Content */}
-                <div className="flex-1 ml-64 mr-96">
-                    <div className="flex flex-col items-center justify-center min-h-screen p-5">
-                        <div className="text-4xl font-bold mb-4 text-gray-800">
-                            Diatom Segmentation
+            return (
+                <div className="flex h-screen bg-gray-200">
+                    <div className="w-64 bg-gray-800 fixed h-full">
+                        <img 
+                            src="/static/diatomhub-images/logo/diatom_hub_5e.svg" 
+                            alt="DiatomHub Logo" 
+                            className="w-4/5 mx-auto mt-5"
+                        />
+                        
+                        <div className="flex flex-col gap-3 px-4 mt-6">
+                            <a href="/modules" 
+                               className="px-4 py-3 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors duration-200">
+                                View Installed Modules
+                            </a>
+                            <a href="/all_papers" 
+                               className="px-4 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-md hover:bg-white/10 transition-colors duration-200">
+                                View Papers
+                            </a>
+                            <a href="/view_uploaded_pdfs" 
+                               className="px-4 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-md hover:bg-white/10 transition-colors duration-200">
+                                View Uploaded PDFs
+                            </a>
+                            <a href="/diatoms_data" 
+                               className="px-4 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-md hover:bg-white/10 transition-colors duration-200">
+                                View Diatoms Data
+                            </a>
+                            <a href="/label" 
+                               className="px-4 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-md hover:bg-white/10 transition-colors duration-200">
+                                Label Images
+                            </a>
                         </div>
-                        
-                        <DiatomSelector 
-                            selected={selectedType}
-                            setSelected={setSelectedType}
-                        />
-                        
-                        <Canvas
-                            imageUrl={imageUrl}
-                            polygons={polygons}
-                            currentPolygon={currentPolygon}
-                            selectedSegmentIndex={selectedSegmentIndex}
-                            isDrawing={isDrawing}
-                            onCanvasClick={handleCanvasClick}
-                            onMouseMove={handleMouseMove}
-                            getDiatomLabel={getDiatomLabel}
-                            containerRef={containerRef}
-                            canvasRef={canvasRef}
-                            imageRef={imageRef}
-                        />
-                        
-                        <div className="flex justify-center space-x-4 mt-6">
-                            <button 
-                                onClick={handlePrevious}
-                                disabled={imageIndex === 0}
-                                className="bg-yellow-400 text-black px-8 py-3 rounded-lg font-bold disabled:opacity-50 transform transition-all duration-200 hover:scale-105 hover:bg-yellow-300 hover:shadow-lg"
-                            >
-                                Previous
-                            </button>
+                    </div>
+
+                    <div className="flex-1 ml-64 mr-96">
+                        <div className="flex flex-col items-center justify-center min-h-screen p-5">
+                            <div className="text-4xl font-bold mb-4 text-gray-800">
+                                Diatom Segmentation
+                            </div>
                             
-                            <SegmentationButtons 
-                                onSave={() => handleSave()}
-                                onUpdate={handleUpdateSegmentations}
-                                onDownload={() => window.location.href = '/api/download_segmentation'}
-                                isSaving={isSaving}
-                                isUpdating={isUpdating}
-                                saveProgress={saveProgress}
-                                hasSegmentations={polygons.length > 0}
+                            <DiatomeSelector 
+                                selected={selectedType}
+                                setSelected={setSelectedType}
                             />
                             
-                            <button 
-                                onClick={handleNext}
-                                disabled={imageIndex === totalImages - 1}
-                                className="bg-yellow-400 text-black px-8 py-3 rounded-lg font-bold disabled:opacity-50 transform transition-all duration-200 hover:scale-105 hover:bg-yellow-300 hover:shadow-lg"
+                            <div 
+                                ref={containerRef}
+                                className="relative w-full max-w-4xl mt-4"
                             >
-                                Next
-                            </button>
+                                <img
+                                    ref={imageRef}
+                                    src={imageUrl}
+                                    alt="Diatom"
+                                    className="w-full"
+                                    onLoad={handleImageLoad}
+                                />
+                                <canvas
+                                    ref={canvasRef}
+                                    className="absolute top-0 left-0 w-full h-full cursor-crosshair"
+                                    onClick={handleCanvasClick}
+                                    onMouseMove={handleMouseMove}
+                                />
+                            </div>
+                            
+                            <div className="flex justify-center space-x-4 mt-6">
+                                <button 
+                                    onClick={handlePrevious}
+                                    disabled={imageIndex === 0}
+                                    className="bg-yellow-400 text-black px-8 py-3 rounded-lg font-bold disabled:opacity-50 transform transition-all duration-200 hover:scale-105 hover:bg-yellow-300 hover:shadow-lg disabled:hover:scale-100 disabled:hover:bg-yellow-400 disabled:hover:shadow-none"
+                                >
+                                    Previous
+                                </button>
+                                <button 
+                                    onClick={handleSave}
+                                    disabled={isSaving}
+                                    className="bg-green-600 text-white px-12 py-3 rounded-lg font-bold transform transition-all duration-200 hover:scale-105 hover:bg-green-500 hover:shadow-lg flex items-center justify-center space-x-2 min-w-[120px]"
+                                >
+                                    {isSaving ? (
+                                        <CircularProgress progress={saveProgress} />
+                                    ) : (
+                                        <span>Save</span>
+                                    )}
+                                </button>
+                                <button 
+                                    onClick={() => window.location.href = '/api/download_segmentation'}
+                                    className="bg-blue-600 text-white px-12 py-3 rounded-lg font-bold transform transition-all duration-200 hover:scale-105 hover:bg-blue-500 hover:shadow-lg"
+                                >
+                                    Download
+                                </button>
+                                <button 
+                                    onClick={handleNext}
+                                    disabled={imageIndex === totalImages - 1}
+                                    className="bg-yellow-400 text-black px-8 py-3 rounded-lg font-bold disabled:opacity-50 transform transition-all duration-200 hover:scale-105 hover:bg-yellow-300 hover:shadow-lg disabled:hover:scale-100 disabled:hover:bg-yellow-400 disabled:hover:shadow-none"
+                                >
+                                    Next
+                                </button>
+                            </div>
+
+                            {imageData?.segmentation_url && (
+                                <div className="mt-4 max-w-4xl w-full">
+                                    <div className="bg-gray-100 p-4 rounded-lg">
+                                        <p className="text-sm text-gray-600 font-semibold mb-1">Segmentation File URL:</p>
+                                        <a 
+                                            href={imageData.segmentation_url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-blue-600 hover:text-blue-800 break-all font-mono text-sm"
+                                        >
+                                            {imageData.segmentation_url}
+                                        </a>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
-                </div>
 
-                {/* Right Sidebar */}
-                <Sidebar 
-                    polygons={polygons}
-                    selectedIndex={selectedSegmentIndex}
-                    onSelectSegment={setSelectedSegmentIndex}
-                    getDiatomLabel={getDiatomLabel}
-                />
-
-                {/* Notifications */}
-                {error && (
-                    <div className="fixed top-4 right-4 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg">
-                        {error}
+                    <div className="w-96 bg-gray-800 fixed right-0 h-full overflow-y-auto">
+                        <div className="text-2xl font-bold text-white text-center py-5 border-b border-gray-700">
+                            Polygons ({polygons.length})
+                        </div>
+                        <div className="p-4 text-white">
+                            <p>Instructions:</p>
+                            <ul className="list-disc pl-5 space-y-2 mt-2">
+                                <li>Click to start drawing a polygon</li>
+                                <li>Click to add points to the polygon</li>
+                                <li>Click near the start point to close the polygon</li>
+                                <li>Press ESC to cancel current polygon</li>
+                                <li>Click on a segmentation in the list to highlight it</li>
+                            </ul>
+                        </div>
+                        
+                        <SegmentationList 
+                            polygons={polygons}
+                            selectedIndex={selectedSegmentIndex}
+                            onSelectSegment={handleSelectSegment}
+                            getDiatomLabel={getDiatomLabel}
+                        />
                     </div>
-                )}
-                
-                {showToast && (
-                    <Toast 
-                        message={toastMessage} 
-                        onClose={() => setShowToast(false)} 
-                    />
-                )}
-            </div>
-        );
-    };
 
-    // Render the application
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<App />);
+                    {showToast && (
+                        <Toast 
+                            message="Segmentation saved successfully!" 
+                            onClose={() => setShowToast(false)} 
+                        />
+                    )}
+                </div>
+            );
+        }
+
+        // Add styles
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slide-up {
+                from {
+                    transform: translateY(100%);
+                    opacity: 0;
+                }
+                to {
+                    transform: translateY(0);
+                    opacity: 1;
+                }
+            }
+            .animate-slide-up {
+                animation: slide-up 0.3s ease-out;
+            }
+            circle {
+                transition: stroke-dashoffset 0.3s ease;
+            }
+        `;
+        document.head.appendChild(style);
+
+        // Render the application
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<DiatomSegmenter />);
     </script>
 </body>
 </html>
