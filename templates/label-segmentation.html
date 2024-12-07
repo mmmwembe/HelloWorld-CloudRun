@@ -95,27 +95,50 @@
     };
 
     const parseSegmentationText = (text, imageWidth, imageHeight) => {
-        if (!text.trim()) return [];
+        if (!text || !text.trim()) return [];
+        if (!imageWidth || !imageHeight) {
+            console.error('Missing dimensions:', { imageWidth, imageHeight });
+            return [];
+        }
         
-        return text.trim().split('\n').map(line => {
-            const [label, ...coords] = line.split(' ');
-            const points = [];
-            
-            for (let i = 0; i < coords.length; i += 2) {
-                if (coords[i] && coords[i+1]) {
-                    points.push({
-                        x: parseFloat(coords[i]) * imageWidth,
-                        y: parseFloat(coords[i+1]) * imageHeight
-                    });
+        console.log('Parsing segmentation text:', {
+            textLength: text.length,
+            imageWidth,
+            imageHeight
+        });
+        
+        try {
+            return text.trim().split('\n').map(line => {
+                const [label, ...coords] = line.split(' ');
+                const points = [];
+                
+                for (let i = 0; i < coords.length; i += 2) {
+                    if (coords[i] && coords[i+1]) {
+                        const x = parseFloat(coords[i]);
+                        const y = parseFloat(coords[i+1]);
+                        
+                        if (isNaN(x) || isNaN(y)) {
+                            console.error('Invalid coordinates:', coords[i], coords[i+1]);
+                            continue;
+                        }
+                        
+                        points.push({
+                            x: x * imageWidth,
+                            y: y * imageHeight
+                        });
+                    }
                 }
-            }
-            
-            return {
-                label: parseInt(label),
-                points,
-                color: getRandomColor()
-            };
-        }).filter(polygon => polygon.points.length >= 3);
+                
+                return {
+                    label: parseInt(label) || 0,
+                    points,
+                    color: getRandomColor()
+                };
+            }).filter(polygon => polygon.points.length >= 3);
+        } catch (error) {
+            console.error('Error parsing segmentation text:', error);
+            return [];
+        }
     };
 
     const getRandomColor = () => {
@@ -543,7 +566,6 @@
         }, [imageIndex]);
 
 
-
         const loadImageData = async (index) => {
             try {
                 const response = await fetch(`/api/diatoms?index=${index}`);
@@ -589,14 +611,28 @@
                         console.log('Loaded segmentation data:', segData); // Debug log
 
                         if (segData.segmentation_indices_array?.length > 0) {
+                            // Validate the segmentation indices before using them
+                            const validPolygons = segData.segmentation_indices_array.filter(segment => 
+                                segment.points && 
+                                Array.isArray(segment.points) && 
+                                segment.points.length > 2 &&
+                                segment.points.every(point => 
+                                    point &&
+                                    typeof point.x === 'number' && 
+                                    typeof point.y === 'number' &&
+                                    !isNaN(point.x) && 
+                                    !isNaN(point.y)
+                                )
+                            );
+
                             // Use existing segmentation indices if available
-                            const enhancedPolygons = segData.segmentation_indices_array.map(segment => ({
+                            const enhancedPolygons = validPolygons.map(segment => ({
                                 ...segment,
                                 color: segment.color || getRandomColor()
                             }));
                             console.log('Using existing segmentation indices:', enhancedPolygons); // Debug log
                             setPolygons(enhancedPolygons);
-                        } else if (segData.annotations) {
+                        } else if (segData.annotations && typeof segData.annotations === 'string' && segData.annotations.trim()) {
                             // Parse annotations if no indices exist
                             const processedPolygons = parseSegmentationText(
                                 segData.annotations,
@@ -604,20 +640,29 @@
                                 img.naturalHeight
                             );
 
-                            const enhancedPolygons = processedPolygons.map(polygon => ({
-                                ...polygon,
-                                ...calculatePolygonData(
-                                    polygon.points,
-                                    img.naturalWidth,
-                                    img.naturalHeight
-                                )
-                            }));
-                            console.log('Processed new polygons:', enhancedPolygons); // Debug log
-                            setPolygons(enhancedPolygons);
+                            if (processedPolygons.length > 0) {
+                                const enhancedPolygons = processedPolygons.map(polygon => ({
+                                    ...polygon,
+                                    ...calculatePolygonData(
+                                        polygon.points,
+                                        img.naturalWidth,
+                                        img.naturalHeight
+                                    )
+                                }));
+                                console.log('Processed new polygons:', enhancedPolygons); // Debug log
+                                setPolygons(enhancedPolygons);
+                            } else {
+                                console.log('No valid polygons found in annotations');
+                                setPolygons([]);
+                            }
+                        } else {
+                            console.log('No valid segmentation data found');
+                            setPolygons([]);
                         }
                     } catch (error) {
                         console.error('Error loading segmentation data:', error);
                         setError('Failed to load segmentation data');
+                        setPolygons([]);
                     }
                 } else {
                     setPolygons([]);
@@ -625,6 +670,7 @@
             } catch (error) {
                 setError('Failed to load image data');
                 console.error('Error:', error);
+                setPolygons([]);
             }
         };
 
