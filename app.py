@@ -581,37 +581,52 @@ def save_segmentation():
     """Save segmentation data and indices array to GCS bucket and update DIATOMS_DATA"""
     try:
         data = request.json
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'No JSON data received'
+            }), 400
+
         image_index = data.get('image_index', 0)
         segmentation_data = data.get('segmentation_data', '')
         image_filename = data.get('image_filename', '')
-        segmentation_indices = data.get('segmentation_indices', [])
-
-        # Extract canvas dimensions from the first segmentation index if available
-        canvas_width = None
-        canvas_height = None
-        if segmentation_indices:
-            first_index = segmentation_indices[0]
-            canvas_width = first_index.get('canvasWidth')
-            canvas_height = first_index.get('canvasHeight')
+        canvas_dimensions = data.get('canvas_dimensions', {})
         
-        # Update DIATOMS_DATA with segmentation URL and indices array
+        logger.info(f"Saving segmentation for image {image_filename}")
+        logger.debug(f"Canvas dimensions: {canvas_dimensions}")
+        
+        # Update DIATOMS_DATA with canvas dimensions
         if 0 <= image_index < len(DIATOMS_DATA):
-            # Save canvas dimensions if available
-            if canvas_width and canvas_height:
-                DIATOMS_DATA[image_index]['canvasWidth'] = canvas_width
-                DIATOMS_DATA[image_index]['canvasHeight'] = canvas_height
+            if canvas_dimensions:
+                DIATOMS_DATA[image_index]['canvasWidth'] = canvas_dimensions.get('width')
+                DIATOMS_DATA[image_index]['canvasHeight'] = canvas_dimensions.get('height')
             
-            # Update paper JSON files
+            # Only proceed with segmentation save if we have data
+            if segmentation_data and image_filename:
+                segmentation_url = gcp_ops.save_segmentation_data(
+                    segmentation_data=segmentation_data,
+                    image_filename=image_filename,
+                    session_id=SESSION_ID,
+                    bucket_name=BUCKET_SEGMENTATION_LABELS
+                )
+                
+                if segmentation_url:
+                    DIATOMS_DATA[image_index]['segmentation_url'] = segmentation_url
+            
+            # Update corresponding entry in PAPER_JSON_FILES
             for paper in PAPER_JSON_FILES:
                 if 'diatoms_data' in paper:
                     if isinstance(paper['diatoms_data'], str):
                         paper['diatoms_data'] = json.loads(paper['diatoms_data'])
                     
                     if paper['diatoms_data'].get('image_url') == DIATOMS_DATA[image_index].get('image_url'):
-                        if canvas_width and canvas_height:
-                            paper['diatoms_data']['canvasWidth'] = canvas_width
-                            paper['diatoms_data']['canvasHeight'] = canvas_height
-
+                        if canvas_dimensions:
+                            paper['diatoms_data'].update({
+                                'canvasWidth': canvas_dimensions.get('width'),
+                                'canvasHeight': canvas_dimensions.get('height')
+                            })
+                        break
+            
             # Save updated data to GCS
             success = ClaudeAI.update_and_save_papers(
                 PAPERS_JSON_PUBLIC_URL,
@@ -621,9 +636,14 @@ def save_segmentation():
             
             if not success:
                 raise Exception("Failed to update papers data in GCS")
-
-        # Rest of your existing save_segmentation code...
-        
+            
+            return jsonify({
+                'success': True,
+                'message': 'Data saved successfully'
+            })
+        else:
+            raise ValueError(f"Invalid image index: {image_index}")
+            
     except Exception as e:
         logger.error(f"Error saving segmentation: {str(e)}")
         return jsonify({
