@@ -13,90 +13,6 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        // ===============================
-        // Part 1: Utility Functions
-        // ===============================
-        const calculatePolygonData = (points, imageWidth, imageHeight) => {
-            // Extract x and y coordinates
-            const denormXs = points.map(p => p.x);
-            const denormYs = points.map(p => p.y);
-            
-            // Calculate bounding points
-            const topLeft = {
-                x: Math.min(...denormXs),
-                y: Math.min(...denormYs)
-            };
-            
-            const bottomRight = {
-                x: Math.max(...denormXs),
-                y: Math.max(...denormYs)
-            };
-            
-            // Calculate dimensions
-            const width = bottomRight.x - topLeft.x;
-            const height = bottomRight.y - topLeft.y;
-            const centerX = topLeft.x + width / 2;
-            const centerY = topLeft.y + height / 2;
-            
-            // Create normalized points
-            const normalizedPoints = points.map(point => ({
-                x: point.x / imageWidth,
-                y: point.y / imageHeight
-            }));
-            
-            // Create YOLO format bbox
-            const yoloBBox = [
-                centerX / imageWidth,
-                centerY / imageHeight,
-                width / imageWidth,
-                height / imageHeight
-            ];
-            
-            return {
-                norm_polygon_points: normalizedPoints,
-                denorm_polygon_points: points,
-                denorm_xs: denormXs,
-                denorm_ys: denormYs,
-                denorm_top_left: topLeft,
-                denorm_bottom_right: bottomRight,
-                denorm_bbox: `${topLeft.x},${topLeft.y} ${bottomRight.x},${bottomRight.y}`,
-                denorm_calculated_yolobbox: yoloBBox,
-                image_width: imageWidth,
-                image_height: imageHeight
-            };
-        };
-
-        const generateSegmentationText = (polygons, imageWidth, imageHeight) => {
-            return polygons.map(polygon => {
-                const normalizedPoints = polygon.points.map(point => {
-                    const x = point.x / imageWidth;
-                    const y = point.y / imageHeight;
-                    return `${x.toFixed(6)} ${y.toFixed(6)}`;
-                }).join(' ');
-                return `${polygon.label} ${normalizedPoints}`;
-            }).join('\n');
-        };
-
-        const getRandomColor = () => {
-            const colors = ['#2ecc71', '#e74c3c', '#3498db', '#f1c40f', '#9b59b6', '#1abc9c'];
-            return colors[Math.floor(Math.random() * colors.length)];
-        };
-
-        const getDiatomLabel = (value) => {
-            const labels = {
-                0: 'Incomplete Diatom',
-                1: 'Complete Diatom',
-                2: 'Fragment Diatom',
-                3: 'Blurred Diatom',
-                4: 'Diatom SideView'
-            };
-            return labels[value] || 'Unknown';
-        };
-
-        // ===============================
-        // Part 2: UI Components
-        // ===============================
-        
         // DiatomeSelector Component
         function DiatomeSelector({ selected, setSelected }) {
             const options = [
@@ -129,8 +45,9 @@
                 </div>
             );
         }
+// File: components.js
 
-        // SegmentationList Component
+        // SegmentationList Component with enhanced bbox display
         function SegmentationList({ polygons, selectedIndex, onSelectSegment, getDiatomLabel }) {
             return (
                 <div className="mt-4 space-y-2 px-4">
@@ -153,6 +70,7 @@
                                     style={{ backgroundColor: polygon.color }}
                                 />
                             </div>
+                            {/* Show bbox for all polygons with 4+ points */}
                             {polygon.points.length >= 4 && polygon.denorm_bbox && (
                                 <div className="mt-2 text-xs font-mono opacity-75">
                                     BBox: {polygon.denorm_bbox}
@@ -216,11 +134,63 @@
             );
         }
 
-        // ===============================
-        // Part 3: Main Component State and Setup
-        // ===============================
-        
-        // Main DiatomSegmenter Component
+        // File: polygon-utils.js
+
+        // Polygon calculation utilities
+        const calculatePolygonMetrics = (points, imageWidth, imageHeight) => {
+            // Extract x and y coordinates
+            const xs = points.map(p => p.x);
+            const ys = points.map(p => p.y);
+            
+            // Calculate normalized points (without label)
+            const norm_points = points.map(p => ({
+                x: p.x / imageWidth,
+                y: p.y / imageHeight
+            }));
+
+            // Calculate denormalized values
+            const denorm_xs = xs;
+            const denorm_ys = ys;
+            
+            // Calculate bounding box points
+            const top_left = {
+                x: Math.min(...xs),
+                y: Math.min(...ys)
+            };
+            
+            const bottom_right = {
+                x: Math.max(...xs),
+                y: Math.max(...ys)
+            };
+            
+            // Calculate YOLO format bbox (x_center, y_center, width, height)
+            const width = bottom_right.x - top_left.x;
+            const height = bottom_right.y - top_left.y;
+            const x_center = top_left.x + width / 2;
+            const y_center = top_left.y + height / 2;
+            
+            const yolo_bbox = {
+                x_center: x_center / imageWidth,
+                y_center: y_center / imageHeight,
+                width: width / imageWidth,
+                height: height / imageHeight
+            };
+            
+            return {
+                norm_polygon_points: norm_points,
+                denorm_polygon_points: points,
+                denorm_xs,
+                denorm_ys,
+                denorm_top_left: top_left,
+                denorm_bottom_right: bottom_right,
+                denorm_bbox: `${Math.round(top_left.x)},${Math.round(top_left.y)} ${Math.round(bottom_right.x)},${Math.round(bottom_right.y)}`,
+                denorm_calculated_yolobbox: Object.values(yolo_bbox).map(v => v.toFixed(6)).join(' '),
+                image_width: imageWidth,
+                image_height: imageHeight
+            };
+        };
+
+        // Main DiatomSegmenter Component - Initial Setup
         function DiatomSegmenter() {
             // State declarations
             const [imageIndex, setImageIndex] = React.useState(0);
@@ -242,10 +212,75 @@
             const imageRef = React.useRef(null);
             const containerRef = React.useRef(null);
 
-            // ===============================
-            // Part 4: Data Handling Functions
-            // ===============================
-            
+            // Utility functions
+            const getRandomColor = () => {
+                const colors = ['#2ecc71', '#e74c3c', '#3498db', '#f1c40f', '#9b59b6', '#1abc9c'];
+                return colors[Math.floor(Math.random() * colors.length)];
+            };
+
+            const getDiatomLabel = (value) => {
+                const labels = {
+                    0: 'Incomplete Diatom',
+                    1: 'Complete Diatom',
+                    2: 'Fragment Diatom',
+                    3: 'Blurred Diatom',
+                    4: 'Diatom SideView'
+                };
+                return labels[value] || 'Unknown';
+            };
+
+    // File: data-handlers.js
+
+    const parseSegmentationFile = (content, imageWidth, imageHeight) => {
+                if (!content.trim()) return [];
+                
+                const lines = content.trim().split('\n');
+                return lines.map(line => {
+                    const [label, ...coords] = line.split(' ');
+                    const points = [];
+                    for (let i = 0; i < coords.length; i += 2) {
+                        if (coords[i] && coords[i+1]) {
+                            const x = parseFloat(coords[i]) * imageWidth;
+                            const y = parseFloat(coords[i + 1]) * imageHeight;
+                            points.push({ x, y });
+                        }
+                    }
+                    
+                    // Only create polygon if it has at least 4 points
+                    if (points.length >= 4) {
+                        const polygon = {
+                            label: parseInt(label),
+                            points,
+                            color: getRandomColor()
+                        };
+                        
+                        Object.assign(polygon, calculatePolygonMetrics(points, imageWidth, imageHeight));
+                        return polygon;
+                    }
+                    return null;
+                }).filter(Boolean);
+            };
+
+            const generateSegmentationTextFromPolygons = (polygonArray) => {
+                const image = imageRef.current;
+                if (!image) return '';
+                
+                const imageWidth = image.naturalWidth;
+                const imageHeight = image.naturalHeight;
+                
+                return polygonArray.map(polygon => {
+                    if (polygon.points.length < 4) return '';
+                    
+                    const normalizedPoints = polygon.points.map(point => {
+                        const normalizedX = point.x / imageWidth;
+                        const normalizedY = point.y / imageHeight;
+                        return `${normalizedX.toFixed(6)} ${normalizedY.toFixed(6)}`;
+                    }).join(' ');
+                    
+                    return `${polygon.label} ${normalizedPoints}`;
+                }).filter(Boolean).join('\n');
+            };
+
             const loadImageData = async (index) => {
                 try {
                     const response = await fetch(`/api/diatoms?index=${index}`);
@@ -293,77 +328,8 @@
                 }
             };
 
-            const handleAutoSave = async (updatedPolygons) => {
-                const validPolygons = updatedPolygons.filter(polygon => polygon.points.length >= 4);
-
-                if (validPolygons.length === 0) {
-                    alert('No valid polygons to save. Each polygon must have at least 4 points.');
-                    return;
-                }
-
-                setIsSaving(true);
-                setSaveProgress(0);
-
-                const progressInterval = setInterval(() => {
-                    setSaveProgress(prev => Math.min(prev + 10, 90));
-                }, 100);
-
-                try {
-                    const segmentationText = generateSegmentationText(validPolygons, imageRef.current.naturalWidth, imageRef.current.naturalHeight);
-                    const imageFileName = imageUrl.split('/').pop().replace(/\.[^/.]+$/, '');
-
-                    const segmentationIndices = validPolygons.map((polygon, index) => ({
-                        index: index,
-                        label: polygon.label,
-                        points_count: polygon.points.length,
-                        label_text: getDiatomLabel(polygon.label),
-                        ...calculatePolygonData(polygon.points, imageRef.current.naturalWidth, imageRef.current.naturalHeight)
-                    }));
-
-                    const response = await fetch('/api/save_segmentation', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            image_index: imageIndex,
-                            segmentation_data: segmentationText,
-                            image_filename: imageFileName,
-                            segmentation_indices: segmentationIndices
-                        })
-                    });
-
-                    const data = await response.json();
-
-                    clearInterval(progressInterval);
-                    setSaveProgress(100);
-
-                    if (data.success) {
-                        setShowToast(true);
-                        setImageData(prev => ({
-                            ...prev,
-                            segmentation_url: data.segmentation_url,
-                            segmentation_indices_array: data.segmentation_indices_array
-                        }));
-                    } else {
-                        throw new Error(data.error || 'Failed to save segmentation');
-                    }
-                } catch (error) {
-                    console.error('Error in auto-save:', error);
-                    alert('Auto-save failed: ' + error.message);
-                } finally {
-                    setTimeout(() => {
-                        setIsSaving(false);
-                        setSaveProgress(0);
-                    }, 500);
-                }
-            };
-
-            // ===============================
-            // Part 5: Drawing and Canvas Functions
-            // ===============================
-            
-            const drawPolygons = () => {
+    // File: drawing-functions.js
+    const drawPolygons = () => {
                 const canvas = canvasRef.current;
                 if (!canvas) return;
 
@@ -406,7 +372,7 @@
                         ctx.beginPath();
                         ctx.strokeStyle = isSelected ? '#ffffff' : '#ff0000';
                         ctx.lineWidth = 1;
-                        ctx.setLineDash([5, 5]);
+                        ctx.setLineDash([5, 5]); // Makes the line dashed
 
                         const { x: x1, y: y1 } = polygon.denorm_top_left;
                         const { x: x2, y: y2 } = polygon.denorm_bottom_right;
@@ -414,7 +380,7 @@
                         const height = y2 - y1;
 
                         ctx.strokeRect(x1, y1, width, height);
-                        ctx.setLineDash([]);
+                        ctx.setLineDash([]); // Reset to solid line
                     }
 
                     if (isSelected) {
@@ -451,48 +417,47 @@
                 }
             };
 
-            const handleCanvasClick = async (e) => {
-                const rect = canvasRef.current.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const y = e.clientY - rect.top;
+        const handleCanvasClick = async (e) => {
+            const rect = canvasRef.current.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
 
-                if (!isDrawing) {
-                    setIsDrawing(true);
-                    setCurrentPolygon([{ x, y }]);
-                } else {
-                    const startPoint = currentPolygon[0];
-                    const distance = Math.sqrt(
-                        Math.pow(x - startPoint.x, 2) + Math.pow(y - startPoint.y, 2)
-                    );
+            if (!isDrawing) {
+                setIsDrawing(true);
+                setCurrentPolygon([{ x, y }]);
+            } else {
+                const startPoint = currentPolygon[0];
+                const distance = Math.sqrt(
+                    Math.pow(x - startPoint.x, 2) + Math.pow(y - startPoint.y, 2)
+                );
 
-                    if (distance < 20 && currentPolygon.length > 2) {
-                        const image = imageRef.current;
-                        const newPolygon = {
-                            label: selectedType,
-                            points: currentPolygon,
-                            color: getRandomColor(),
-                            ...calculatePolygonData(currentPolygon, image.naturalWidth, image.naturalHeight)
-                        };
+                if (distance < 20 && currentPolygon.length > 2) {
+                    const image = imageRef.current;
+                    const newPolygon = {
+                        label: selectedType,
+                        points: currentPolygon,
+                        color: getRandomColor(),
+                        ...calculatePolygonMetrics(currentPolygon, image.naturalWidth, image.naturalHeight)
+                    };
 
-                        const updatedPolygons = [...polygons, newPolygon];
-                        setPolygons(updatedPolygons);
-                        setCurrentPolygon([]);
-                        setIsDrawing(false);
+                    const updatedPolygons = [...polygons, newPolygon];
+                    setPolygons(updatedPolygons);
+                    setCurrentPolygon([]);
+                    setIsDrawing(false);
 
-                        if (currentPolygon.length >= 4) {
-                            await handleAutoSave(updatedPolygons);
-                        }
-                    } else {
-                        setCurrentPolygon([...currentPolygon, { x, y }]);
+                    // Only autosave if polygon has 4 or more points
+                    if (currentPolygon.length >= 4) {
+                        await handleAutoSave(updatedPolygons);
                     }
+                } else {
+                    setCurrentPolygon([...currentPolygon, { x, y }]);
                 }
-            };
+            }
+        };
 
-            // ===============================
-            // Part 6: Event Handlers and Effects
-            // ===============================
-            
-            const handleImageLoad = () => {
+
+    // File: react-effects.js
+    const handleImageLoad = () => {
                 const canvas = canvasRef.current;
                 const container = containerRef.current;
                 const image = imageRef.current;
@@ -512,6 +477,74 @@
                     }
                     
                     drawPolygons();
+                }
+            };
+
+            const handleAutoSave = async (updatedPolygons) => {
+                // Filter out polygons with less than 4 points
+                const validPolygons = updatedPolygons.filter(polygon => polygon.points.length >= 4);
+
+                if (validPolygons.length === 0) {
+                    alert('No valid polygons to save. Each polygon must have at least 4 points.');
+                    return;
+                }
+
+                setIsSaving(true);
+                setSaveProgress(0);
+
+                const progressInterval = setInterval(() => {
+                    setSaveProgress(prev => Math.min(prev + 10, 90));
+                }, 100);
+
+                try {
+                    const segmentationText = generateSegmentationTextFromPolygons(validPolygons);
+                    const imageFileName = imageUrl.split('/').pop().replace(/\.[^/.]+$/, '');
+
+                    const segmentationIndices = validPolygons.map((polygon, index) => ({
+                        index: index,
+                        label: polygon.label,
+                        points_count: polygon.points.length,
+                        label_text: getDiatomLabel(polygon.label),
+                        denorm_bbox: `${Math.round(polygon.denorm_top_left.x)},${Math.round(polygon.denorm_top_left.y)} ${Math.round(polygon.denorm_bottom_right.x)},${Math.round(polygon.denorm_bottom_right.y)}`,
+                        denorm_calculated_yolobbox: Object.values(polygon.denorm_calculated_yolobbox).join(' ')
+                    }));
+
+                    const response = await fetch('/api/save_segmentation', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            image_index: imageIndex,
+                            segmentation_data: segmentationText,
+                            image_filename: imageFileName,
+                            segmentation_indices: segmentationIndices
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    clearInterval(progressInterval);
+                    setSaveProgress(100);
+
+                    if (data.success) {
+                        setShowToast(true);
+                        setImageData(prev => ({
+                            ...prev,
+                            segmentation_url: data.segmentation_url,
+                            segmentation_indices_array: data.segmentation_indices_array
+                        }));
+                    } else {
+                        throw new Error(data.error || 'Failed to save segmentation');
+                    }
+                } catch (error) {
+                    console.error('Error in auto-save:', error);
+                    alert('Auto-save failed: ' + error.message);
+                } finally {
+                    setTimeout(() => {
+                        setIsSaving(false);
+                        setSaveProgress(0);
+                    }, 500);
                 }
             };
 
@@ -542,37 +575,8 @@
                 setSelectedSegmentIndex(index === selectedSegmentIndex ? null : index);
             };
 
-            const parseSegmentationFile = (content, imageWidth, imageHeight) => {
-                if (!content.trim()) return [];
-                
-                const lines = content.trim().split('\n');
-                return lines.map(line => {
-                    const [label, ...coords] = line.split(' ');
-                    const points = [];
-                    for (let i = 0; i < coords.length; i += 2) {
-                        if (coords[i] && coords[i+1]) {
-                            const x = parseFloat(coords[i]) * imageWidth;
-                            const y = parseFloat(coords[i + 1]) * imageHeight;
-                            points.push({ x, y });
-                        }
-                    }
-                    
-                    if (points.length >= 4) {
-                        const polygon = {
-                            label: parseInt(label),
-                            points,
-                            color: getRandomColor()
-                        };
-                        
-                        Object.assign(polygon, calculatePolygonData(points, imageWidth, imageHeight));
-                        return polygon;
-                    }
-                    return null;
-                }).filter(Boolean);
-            };
-
-            // Effects
-            React.useEffect(() => {
+    // File: render-ui.js
+    React.useEffect(() => {
                 document.addEventListener('keydown', handleKeyPress);
                 return () => {
                     document.removeEventListener('keydown', handleKeyPress);
@@ -600,10 +604,6 @@
                 }
             }, [imageUrl, pendingSegmentationData]);
 
-            // ===============================
-            // Part 7: Component Render
-            // ===============================
-            
             return (
                 <div className="flex h-screen bg-gray-200">
                     <div className="w-64 bg-gray-800 fixed h-full">
@@ -752,10 +752,6 @@
             );
         }
 
-        // ===============================
-        // Part 8: Styles and App Initialization
-        // ===============================
-        
         // Add styles
         const style = document.createElement('style');
         style.textContent = `
