@@ -273,6 +273,7 @@ function DiatomSegmenter() {
                 }).filter(Boolean).join('\n');
             };
 
+
             const loadImageData = async (index) => {
                 try {
                     const response = await fetch(`/api/diatoms?index=${index}`);
@@ -309,46 +310,52 @@ function DiatomSegmenter() {
                             }
                             const segData = await segResponse.json();
                             
+                            // Set the raw segmentation data for later use
                             setPendingSegmentationData(segData.annotations);
                             
-                            if (segData.segmentation_indices_array) {
-                                // Process and enhance segmentation data
-                                const enhancedIndices = segData.segmentation_indices_array.map(seg => {
-                                    if (!seg.norm_polygon_points) {
-                                        const points = seg.segmentation_points.split(' ');
-                                        const normPoints = [];
-                                        const denormPoints = [];
-                                        const denormXs = [];
-                                        const denormYs = [];
-                                        
-                                        for (let i = 0; i < points.length; i += 2) {
-                                            const normX = parseFloat(points[i]);
-                                            const normY = parseFloat(points[i + 1]);
-                                            const denormX = normX * data.data.image_width;
-                                            const denormY = normY * data.data.image_height;
-                                            
-                                            normPoints.push(normX, normY);
-                                            denormPoints.push(denormX, denormY);
-                                            denormXs.push(denormX);
-                                            denormYs.push(denormY);
-                                        }
-                                        
-                                        return {
-                                            ...seg,
-                                            norm_polygon_points: points.join(' '),
-                                            denorm_polygon_points: denormPoints.join(' '),
-                                            denorm_xs: denormXs,
-                                            denorm_ys: denormYs,
-                                            denorm_top_left: [Math.min(...denormXs), Math.min(...denormYs)],
-                                            denorm_bottom_right: [Math.max(...denormXs), Math.max(...denormYs)]
-                                        };
+                            // Convert the segmentation data into polygons immediately
+                            if (segData.annotations) {
+                                const lines = segData.annotations.trim().split('\n');
+                                const convertedPolygons = lines.map((line, idx) => {
+                                    const [label, ...coordinates] = line.split(' ');
+                                    const points = [];
+                                    
+                                    // Convert text coordinates into points
+                                    for (let i = 0; i < coordinates.length; i += 2) {
+                                        const normX = parseFloat(coordinates[i]);
+                                        const normY = parseFloat(coordinates[i + 1]);
+                                        const x = normX * data.data.image_width;
+                                        const y = normY * data.data.image_height;
+                                        points.push({ x, y });
                                     }
-                                    return seg;
+                                    
+                                    // Get the denormalized coordinates for the bounding box
+                                    const denormXs = points.map(p => p.x);
+                                    const denormYs = points.map(p => p.y);
+                                    
+                                    // Create polygon object with all required fields
+                                    const polygon = {
+                                        label: parseInt(label),
+                                        points: points,
+                                        color: getRandomColor(),
+                                        norm_polygon_points: coordinates.join(' '),
+                                        denorm_polygon_points: points.map(p => `${p.x} ${p.y}`).join(' '),
+                                        denorm_xs: denormXs,
+                                        denorm_ys: denormYs,
+                                        denorm_top_left: [Math.min(...denormXs), Math.min(...denormYs)],
+                                        denorm_bottom_right: [Math.max(...denormXs), Math.max(...denormYs)]
+                                    };
+                                    
+                                    return polygon;
                                 });
                                 
+                                setPolygons(convertedPolygons);
+                            }
+                            
+                            if (segData.segmentation_indices_array) {
                                 setImageData(prev => ({
                                     ...prev,
-                                    segmentation_indices_array: enhancedIndices
+                                    segmentation_indices_array: segData.segmentation_indices_array
                                 }));
                             }
                         } catch (error) {
