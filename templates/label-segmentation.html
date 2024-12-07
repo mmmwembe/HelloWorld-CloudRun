@@ -302,72 +302,71 @@
     };
 
     const SegmentationList = ({ polygons, selectedIndex, onSelectSegment, getDiatomLabel }) => {
+            return (
+                <div className="mt-4 space-y-2 px-4">
+                    {polygons.map((polygon, index) => (
+                        <div
+                            key={index}
+                            onClick={() => onSelectSegment(index)}
+                            className={`p-3 rounded-lg cursor-pointer transition-all duration-200 ${
+                                selectedIndex === index 
+                                    ? 'bg-blue-600 text-white shadow-lg transform scale-105' 
+                                    : 'bg-gray-700 text-gray-200 hover:bg-gray-600'
+                            }`}
+                        >
+                            <div className="flex items-center justify-between">
+                                <span className="font-medium">
+                                    {index + 1}. {getDiatomLabel(polygon.label)}
+                                </span>
+                                <div 
+                                    className="w-4 h-4 rounded-full" 
+                                    style={{ backgroundColor: polygon.color }}
+                                />
+                            </div>
+                            
+                            {selectedIndex === index && (
+                            <div className="mt-2 text-sm opacity-80">
+                                <div>Points: {polygon.points.length}</div>
+                                {polygon.denorm_bbox && (
+                                    <div>Bbox: {polygon.denorm_bbox}</div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                ))}
+            </div>
+        );
+    };
+
+    const Sidebar = ({ polygons, selectedIndex, onSelectSegment, getDiatomLabel }) => {
         return (
-            <div className="mt-4 space-y-2 px-4">
-                {polygons.map((polygon, index) => (
-                    <div
-                        key={index}
-                        onClick={() => onSelectSegment(index)}
-                        className={`p-3 rounded-lg cursor-pointer transition-all duration-200 ${
-                            selectedIndex === index 
-                                ? 'bg-blue-600 text-white shadow-lg transform scale-105' 
-                                : 'bg-gray-700 text-gray-200 hover:bg-gray-600'
-                        }`}
-                    >
-                        <div className="flex items-center justify-between">
-                            <span className="font-medium">
-                                {index + 1}. {getDiatomLabel(polygon.label)}
-                            </span>
-                            <div 
-                                className="w-4 h-4 rounded-full" 
-                                style={{ backgroundColor: polygon.color }}
-                            />
-                        </div>
-                        
-                        {selectedIndex === index && (
-                        <div className="mt-2 text-sm opacity-80">
-                            <div>Points: {polygon.points.length}</div>
-                            {polygon.denorm_bbox && (
-                                <div>Bbox: {polygon.denorm_bbox}</div>
-                            )}
-                        </div>
-                    )}
+            <div className="w-96 bg-gray-800 fixed right-0 h-full overflow-y-auto">
+                <div className="text-2xl font-bold text-white text-center py-5 border-b border-gray-700">
+                    Polygons ({polygons.length})
                 </div>
-            ))}
-        </div>
-    );
-};
-
-const Sidebar = ({ polygons, selectedIndex, onSelectSegment, getDiatomLabel }) => {
-    return (
-        <div className="w-96 bg-gray-800 fixed right-0 h-full overflow-y-auto">
-            <div className="text-2xl font-bold text-white text-center py-5 border-b border-gray-700">
-                Polygons ({polygons.length})
+                
+                <div className="p-4 text-white">
+                    <p>Instructions:</p>
+                    <ul className="list-disc pl-5 space-y-2 mt-2">
+                        <li>Click to start drawing a polygon</li>
+                        <li>Click to add points to the polygon</li>
+                        <li>Click near the start point to close the polygon</li>
+                        <li>Press ESC to cancel current polygon</li>
+                        <li>Click on a segmentation in the list to highlight it</li>
+                    </ul>
+                </div>
+                
+                <SegmentationList 
+                    polygons={polygons}
+                    selectedIndex={selectedIndex}
+                    onSelectSegment={onSelectSegment}
+                    getDiatomLabel={getDiatomLabel}
+                />
             </div>
-            
-            <div className="p-4 text-white">
-                <p>Instructions:</p>
-                <ul className="list-disc pl-5 space-y-2 mt-2">
-                    <li>Click to start drawing a polygon</li>
-                    <li>Click to add points to the polygon</li>
-                    <li>Click near the start point to close the polygon</li>
-                    <li>Press ESC to cancel current polygon</li>
-                    <li>Click on a segmentation in the list to highlight it</li>
-                </ul>
-            </div>
-            
-            <SegmentationList 
-                polygons={polygons}
-                selectedIndex={selectedIndex}
-                onSelectSegment={onSelectSegment}
-                getDiatomLabel={getDiatomLabel}
-            />
-        </div>
-    );
-};
+        );
+    };
 
-
-const Canvas = ({
+    const Canvas = ({
         imageUrl,
         polygons,
         currentPolygon,
@@ -388,10 +387,11 @@ const Canvas = ({
             const ctx = canvas.getContext('2d');
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Draw completed polygons
+            // Draw completed polygons and their bounding boxes
             polygons.forEach((polygon, index) => {
                 if (polygon.points.length < 3) return;
 
+                // Draw the polygon
                 ctx.beginPath();
                 ctx.moveTo(polygon.points[0].x, polygon.points[0].y);
                 for (let i = 1; i < polygon.points.length; i++) {
@@ -419,6 +419,27 @@ const Canvas = ({
                     ctx.fillStyle = `${polygon.color}40`;
                 }
                 ctx.fill();
+
+                // Draw bounding box if it exists
+                if (polygon.denorm_bbox) {
+                    const [topLeft, bottomRight] = polygon.denorm_bbox.split(' ').map(point => {
+                        const [x, y] = point.split(',');
+                        return { x: parseFloat(x), y: parseFloat(y) };
+                    });
+
+                    ctx.beginPath();
+                    ctx.strokeStyle = isSelected ? '#ffffff' : polygon.color;
+                    ctx.setLineDash([5, 5]); // Make the bbox dashed
+                    ctx.lineWidth = 1;
+                    ctx.rect(
+                        topLeft.x,
+                        topLeft.y,
+                        bottomRight.x - topLeft.x,
+                        bottomRight.y - topLeft.y
+                    );
+                    ctx.stroke();
+                    ctx.setLineDash([]); // Reset line style
+                }
                 
                 if (isSelected) {
                     const centerX = polygon.points.reduce((sum, p) => sum + p.x, 0) / polygon.points.length;
@@ -474,8 +495,10 @@ const Canvas = ({
                         const image = imageRef.current;
                         
                         if (canvas && container && image) {
-                            canvas.width = container.offsetWidth;
-                            canvas.height = container.offsetHeight;
+                            canvas.width = image.width;  // Use image dimensions instead of container
+                            canvas.height = image.height;
+                            canvas.style.width = '100%';  // Make canvas responsive
+                            canvas.style.height = 'auto';
                             onImageLoad?.();
                             drawPolygons();
                         }
@@ -519,47 +542,80 @@ const Canvas = ({
             loadImageData(imageIndex);
         }, [imageIndex]);
 
+
         const loadImageData = async (index) => {
+    try {
+        const response = await fetch(`/api/diatoms?index=${index}`);
+        const data = await response.json();
+        
+        if (data.error) {
+            setError(data.error);
+            return;
+        }
+
+        setImageUrl(data.data.image_url);
+        setImageData(data.data);
+        setTotalImages(data.total_images);
+        setImageIndex(data.current_index);
+        setSelectedSegmentIndex(null);
+
+        if (data.data.segmentation_url) {
             try {
-                const response = await fetch(`/api/diatoms?index=${index}`);
-                const data = await response.json();
+                const segResponse = await fetch(
+                    `/api/get_segmentation?url=${encodeURIComponent(data.data.segmentation_url)}&image_index=${index}`
+                );
                 
-                if (data.error) {
-                    setError(data.error);
-                    return;
+                if (!segResponse.ok) {
+                    throw new Error('Failed to fetch segmentation data');
                 }
-
-                setImageUrl(data.data.image_url);
-                setImageData(data.data);
-                setTotalImages(data.total_images);
-                setImageIndex(data.current_index);
-                setSelectedSegmentIndex(null);
-
-                if (data.data.segmentation_url) {
-                    const segResponse = await fetch(
-                        `/api/get_segmentation?url=${encodeURIComponent(data.data.segmentation_url)}&image_index=${index}`
+                
+                const segData = await segResponse.json();
+                if (segData.annotations) {
+                    // Process segmentations and add their properties
+                    const processedPolygons = parseSegmentationText(
+                        segData.annotations,
+                        data.data.image_width,
+                        data.data.image_height
                     );
-                    
-                    if (!segResponse.ok) {
-                        throw new Error('Failed to fetch segmentation data');
-                    }
-                    
-                    const segData = await segResponse.json();
-                    if (segData.annotations) {
-                        const processedPolygons = parseSegmentationText(
-                            segData.annotations,
-                            data.data.image_width,
-                            data.data.image_height
-                        );
-                        setPolygons(processedPolygons);
-                    }
+
+                    // Add enhanced data to existing segmentations
+        const enhancedPolygons = processedPolygons.map(polygon => {
+                    const enhancedData = calculatePolygonData(
+                        polygon.points,
+                        data.data.image_width,
+                        data.data.image_height
+                    );
+                    return {
+                        ...polygon,
+                        ...enhancedData
+                    };
+                });
+
+                // If there are existing segmentation indices, merge their data
+                if (segData.segmentation_indices_array) {
+                    const mergedPolygons = enhancedPolygons.map((polygon, index) => {
+                        const existingData = segData.segmentation_indices_array[index];
+                        return {
+                            ...polygon,
+                            ...existingData
+                        };
+                    });
+                    setPolygons(mergedPolygons);
                 } else {
-                    setPolygons([]);
+                    setPolygons(enhancedPolygons);
                 }
-            } catch (error) {
-                setError('Failed to load image data');
-                console.error('Error:', error);
             }
+        } catch (error) {
+            console.error('Error loading segmentation data:', error);
+            setError('Failed to load segmentation data');
+        }
+        } else {
+        setPolygons([]);
+        }
+        } catch (error) {
+        setError('Failed to load image data');
+        console.error('Error:', error);
+        }
         };
 
         const handleUpdateSegmentations = async () => {
