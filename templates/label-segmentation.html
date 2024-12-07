@@ -586,7 +586,6 @@
         }, [imageIndex]);
 
 
-
         const loadImageData = async (index) => {
             try {
                 const response = await fetch(`/api/diatoms?index=${index}`);
@@ -631,35 +630,70 @@
                         const segData = await segResponse.json();
                         console.log('Loaded segmentation data:', segData);
 
+                        // First try to use segmentation_indices_array
                         if (segData.segmentation_indices_array?.length > 0) {
-                            // Use existing segmentation indices if available
-                            const validPolygons = segData.segmentation_indices_array.filter(segment => 
-                                segment.points && 
-                                Array.isArray(segment.points) && 
-                                segment.points.length > 2
-                            ).map(segment => {
-                                // Preserve all existing data including bbox
-                                const polygon = {
-                                    ...segment,
-                                    color: segment.color || getRandomColor(),
-                                    points: segment.denorm_polygon_points || segment.points
-                                };
+                            const validPolygons = segData.segmentation_indices_array
+                                .filter(segment => {
+                                    // Validate the segment has points
+                                    if (!segment.points?.length) {
+                                        console.log('Segment missing points:', segment);
+                                        return false;
+                                    }
 
-                                // If the polygon doesn't have enhanced data, calculate it
-                                if (!segment.denorm_bbox) {
-                                    const enhancedData = calculatePolygonData(
-                                        polygon.points,
-                                        img.naturalWidth,
-                                        img.naturalHeight
+                                    // Validate each point has valid x,y coordinates
+                                    const validPoints = segment.points.every(point => 
+                                        point && 
+                                        typeof point.x === 'number' && 
+                                        typeof point.y === 'number' && 
+                                        !isNaN(point.x) && 
+                                        !isNaN(point.y)
                                     );
-                                    return {...polygon, ...enhancedData};
-                                }
-                                return polygon;
-                            });
+
+                                    if (!validPoints) {
+                                        console.log('Segment has invalid points:', segment);
+                                        return false;
+                                    }
+
+                                    return true;
+                                })
+                                .map(segment => {
+                                    // Start with existing data
+                                    let polygon = {
+                                        ...segment,
+                                        color: segment.color || getRandomColor()
+                                    };
+
+                                    // If denorm_polygon_points exist, use them
+                                    if (segment.denorm_polygon_points?.length) {
+                                        polygon.points = segment.denorm_polygon_points;
+                                    }
+
+                                    // If we don't have enhanced data, calculate it
+                                    if (!segment.denorm_bbox) {
+                                        const enhancedData = calculatePolygonData(
+                                            polygon.points,
+                                            img.naturalWidth,
+                                            img.naturalHeight
+                                        );
+                                        polygon = { ...polygon, ...enhancedData };
+                                    }
+
+                                    return polygon;
+                                });
 
                             console.log('Valid polygons to display:', validPolygons);
-                            setPolygons(validPolygons);
-                        } else if (segData.annotations && typeof segData.annotations === 'string' && segData.annotations.trim()) {
+                            if (validPolygons.length > 0) {
+                                setPolygons(validPolygons);
+                                return; // Exit if we successfully loaded polygons
+                            }
+                        }
+
+                        // Try parsing annotations if indices didn't work
+                        if (segData.annotations && 
+                            typeof segData.annotations === 'string' && 
+                            segData.annotations.trim() && 
+                            !segData.annotations.includes('0.000000 0.000000')) {
+                            
                             const processedPolygons = parseSegmentationText(
                                 segData.annotations,
                                 img.naturalWidth,
@@ -675,16 +709,14 @@
                                         img.naturalHeight
                                     )
                                 }));
-                                console.log('Processed new polygons:', enhancedPolygons);
+                                console.log('Processed polygons from annotations:', enhancedPolygons);
                                 setPolygons(enhancedPolygons);
-                            } else {
-                                console.log('No valid polygons found in annotations');
-                                setPolygons([]);
+                                return;
                             }
-                        } else {
-                            console.log('No valid segmentation data found');
-                            setPolygons([]);
                         }
+
+                        console.log('No valid segmentation data found');
+                        setPolygons([]);
                     } catch (error) {
                         console.error('Error loading segmentation data:', error);
                         setError('Failed to load segmentation data');
@@ -699,7 +731,6 @@
                 setPolygons([]);
             }
         };
-
 
         const handleUpdateSegmentations = async () => {
             setIsUpdating(true);
