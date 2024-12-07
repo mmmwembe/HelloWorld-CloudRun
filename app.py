@@ -7,9 +7,6 @@ import json
 import tempfile
 from threading import Thread, Lock
 from modules.installed_packages import get_installed_packages
-# from modules import ClaudeAI
-# from modules import GCPOps
-# from modules import PDFOps
 from modules import ClaudeAI, GCPOps, PDFOps, SegmentationOps
 import logging
 import pandas as pd
@@ -184,85 +181,6 @@ def process_pdfs(pdf_urls):
     with data_lock:
         processing_status['complete'] = True
 
-
-# def process_pdfs(pdf_urls):
-#     """Background task to process PDFs"""
-#     global processing_status, PAPER_JSON_FILES
-    
-#     TEMP_JSON_FILES =[]
-#     for i, url in enumerate(pdf_urls, 1):
-#         processing_status['current_index'] = i
-#         processing_status['current_url'] = url
-        
-#         try:
-#             pdf_ops = PDFOps()
-#             claude = ClaudeAI()
-            
-#             papers_json_public_url = f"https://storage.googleapis.com/{PAPERS_BUCKET_JSON_FILES}/jsons_from_pdfs/{SESSION_ID}/{SESSION_ID}.json"
-    
-#             # Load existing PAPER_JSON_FILES
-            
-            
-#             # Extract text and images
-#             full_text, first_two_pages_text, filename = pdf_ops.extract_text_from_pdf(url)
-#             extracted_images_file_metadata = pdf_ops.extract_images_and_metadata(url, SESSION_ID, BUCKET_EXTRACTED_IMAGES)
-            
-#             # Process paper
-#             paper_info, diatoms_data, paper_image_urls = claude.process_paper(full_text, extracted_images_file_metadata)
-            
-#             # Get citation info
-#             citation_info = claude.extract_citation(first_two_pages_text=first_two_pages_text, method="default_citation")
-            
-#             # Create paper JSON
-#             pdf_paper_json = {
-#                 "pdf_file_url": safe_value(url),
-#                 "filename": safe_value(filename),
-#                 "extracted_images_file_metadata": safe_value(extracted_images_file_metadata),
-#                 "pdf_text_content": safe_value(full_text),
-#                 "first_two_pages_text": safe_value(first_two_pages_text),
-#                 "paper_info": safe_value(paper_info),
-#                 "papers_json_public_url": safe_value(papers_json_public_url),
-#                 "diatoms_data": safe_value(diatoms_data),
-#                 "citation": safe_value(citation_info)
-#             }
-            
-#             # Update PAPER_JSON_FILES and save
-#             # PAPER_JSON_FILES.append(pdf_paper_json)
-#             TEMP_JSON_FILES.append(pdf_paper_json)
-                  
-#             # Update processing status
-#             processing_status.update({
-#                 'full_text': full_text,
-#                 'first_two_pages_text': first_two_pages_text,
-#                 'filename': filename,
-#                 'citation_info': json.dumps(citation_info, indent=2),
-#                 'extracted_images_file_metadata': json.dumps(extracted_images_file_metadata, indent=2),
-#                 'pdf_paper_json': json.dumps(pdf_paper_json, indent=2),
-#                 'paper_info': json.dumps(paper_info, indent=2),
-#                 'diatoms_data': json.dumps(diatoms_data, indent=2)
-#             })
-            
-#         except Exception as e:
-#             app.logger.error(f"Error processing PDF: {str(e)}")
-#             processing_status.update({
-#                 'full_text': 'Error extracting text',
-#                 'first_two_pages_text': 'Error extracting text',
-#                 'filename': 'Error extracting filename',
-#                 'citation_info': 'Error extracting citation',
-#                 'extracted_images_file_metadata': 'Error extracting images and file metadata',
-#                 'pdf_paper_json': 'Error generating pdf_paper_json',
-#                 'paper_info': 'Error generating paper_info',
-#                 'diatoms_data': 'Error generating diatoms_data'
-#             })
-            
-#         time.sleep(15)
-    
-#     processing_status['complete'] = True
-#     # Save paper jons to GCP
-    
-#     PAPER_JSON_FILES = gcp_ops.load_paper_json_files(papers_json_public_url)
-#     PAPER_JSON_FILES.extend(TEMP_JSON_FILES)
-#     papers_json_public_url = gcp_ops.save_paper_json_files(papers_json_public_url, PAPER_JSON_FILES)
 
 def save_labels(updated_data):
     """Save updated labels and synchronize all data structures"""
@@ -503,76 +421,6 @@ def get_diatoms():
             'error': f'Error retrieving diatoms data: {str(e)}'
         }), 500
 
-# @app.route('/api/diatoms', methods=['GET'])
-# def get_diatoms():
-#     try:
-#         image_index = request.args.get('index', 0, type=int)
-        
-#         # Use the global DIATOMS_DATA
-#         global DIATOMS_DATA
-        
-#         # Check if we have any data
-#         if not DIATOMS_DATA:
-#             try:
-#                 # Try to reload the data
-#                 DIATOMS_DATA = ClaudeAI.get_DIATOMS_DATA(PAPERS_JSON_PUBLIC_URL)
-#                 if not DIATOMS_DATA:
-#                     return jsonify({
-#                         'current_index': 0,
-#                         'total_images': 0,
-#                         'data': {},
-#                         'error': 'No diatoms data available'
-#                     })
-#             except Exception as e:
-#                 app.logger.error(f"Error reloading diatoms data: {str(e)}")
-#                 return jsonify({
-#                     'current_index': 0,
-#                     'total_images': 0,
-#                     'data': {},
-#                     'error': 'Failed to load diatoms data'
-#                 })
-        
-#         # Ensure index is within bounds
-#         total_images = len(DIATOMS_DATA)
-#         image_index = min(max(0, image_index), total_images - 1)
-        
-#         try:
-#             current_image_data = DIATOMS_DATA[image_index]
-            
-#             # Ensure segmentation data is loaded
-#             if current_image_data.get('segmentation_url') and current_image_data.get('segmentation_indices_array'):
-#                 segmentation_text = gcp_ops.load_segmentation_data(current_image_data['segmentation_url'])
-#                 if segmentation_text:
-#                     # Process segmentations to add denormalized points
-#                     current_image_data = segmentation_ops.process_image_segmentations(
-#                         current_image_data,
-#                         segmentation_text
-#                     )
-            
-#             return jsonify({
-#                 'current_index': image_index,
-#                 'total_images': total_images,
-#                 'data': current_image_data
-#             })
-            
-#         except IndexError:
-#             app.logger.error(f"Failed to get data for index {image_index} from list of length {total_images}")
-#             return jsonify({
-#                 'current_index': 0,
-#                 'total_images': total_images,
-#                 'data': {},
-#                 'error': 'Invalid image index'
-#             })
-        
-#     except Exception as e:
-#         app.logger.error(f"Error in get_diatoms: {str(e)}")
-#         return jsonify({
-#             'current_index': 0,
-#             'total_images': 0,
-#             'data': {},
-#             'error': f'Error retrieving diatoms data: {str(e)}'
-#         }), 500
-
 @app.route('/api/save', methods=['POST'])
 def save():
     try:
@@ -655,11 +503,11 @@ def save_segmentation():
         image_index = data.get('image_index', 0)
         segmentation_data = data.get('segmentation_data', '')
         image_filename = data.get('image_filename', '')
-        segmentation_indices = data.get('segmentation_indices', [])  # Get indices array
+        segmentation_indices = data.get('segmentation_indices', [])
         
-        logger.info("Saving segmentation for image {}".format(image_filename))
-        logger.debug("Segmentation data: {}".format(segmentation_data))
-        logger.debug("Segmentation indices: {}".format(segmentation_indices))
+        logger.info(f"Saving segmentation for image {image_filename}")
+        logger.debug(f"Segmentation data: {segmentation_data}")
+        logger.debug(f"Segmentation indices: {segmentation_indices}")
         
         if not segmentation_data or not image_filename:
             raise ValueError("Missing required data")
@@ -675,12 +523,18 @@ def save_segmentation():
         if not segmentation_url:
             raise Exception("Failed to save segmentation data to GCS")
         
-        logger.info("Saved segmentation to URL: {}".format(segmentation_url))
+        logger.info(f"Saved segmentation to URL: {segmentation_url}")
             
-        # Update DIATOMS_DATA with both the segmentation URL and indices array
+        # Update DIATOMS_DATA with segmentation URL and indices array
         if 0 <= image_index < len(DIATOMS_DATA):
             DIATOMS_DATA[image_index]['segmentation_url'] = segmentation_url
             DIATOMS_DATA[image_index]['segmentation_indices_array'] = segmentation_indices
+            
+            # Store canvas dimensions if not present
+            if 'canvasWidth' not in DIATOMS_DATA[image_index]:
+                DIATOMS_DATA[image_index]['canvasWidth'] = DIATOMS_DATA[image_index].get('image_width')
+            if 'canvasHeight' not in DIATOMS_DATA[image_index]:
+                DIATOMS_DATA[image_index]['canvasHeight'] = DIATOMS_DATA[image_index].get('image_height')
             
             # Update corresponding entry in PAPER_JSON_FILES
             for paper in PAPER_JSON_FILES:
@@ -689,8 +543,12 @@ def save_segmentation():
                         paper['diatoms_data'] = json.loads(paper['diatoms_data'])
                     
                     if paper['diatoms_data'].get('image_url') == DIATOMS_DATA[image_index].get('image_url'):
-                        paper['diatoms_data']['segmentation_url'] = segmentation_url
-                        paper['diatoms_data']['segmentation_indices_array'] = segmentation_indices
+                        paper['diatoms_data'].update({
+                            'segmentation_url': segmentation_url,
+                            'segmentation_indices_array': segmentation_indices,
+                            'canvasWidth': DIATOMS_DATA[image_index].get('canvasWidth'),
+                            'canvasHeight': DIATOMS_DATA[image_index].get('canvasHeight')
+                        })
                         break
             
             # Save updated data to GCS
@@ -710,10 +568,10 @@ def save_segmentation():
                 'segmentation_indices_array': segmentation_indices
             })
         else:
-            raise ValueError("Invalid image index: {}".format(image_index))
+            raise ValueError(f"Invalid image index: {image_index}")
             
     except Exception as e:
-        logger.error("Error saving segmentation: {}".format(str(e)))
+        logger.error(f"Error saving segmentation: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)
@@ -721,7 +579,7 @@ def save_segmentation():
 
 @app.route('/api/get_segmentation')
 def get_segmentation():
-    """Proxy route to fetch segmentation annotations and indices from GCS"""
+    """Get segmentation data with enhanced fields"""
     try:
         url = request.args.get('url')
         image_index = request.args.get('image_index', type=int)
@@ -729,22 +587,45 @@ def get_segmentation():
         if not url:
             raise ValueError("No URL provided")
             
-        logger.info(f"Attempting to load segmentation annotations from: {url}")
+        logger.info(f"Loading segmentation annotations from: {url}")
         
-        # Use the existing load_segmentation_data method but store as annotations
+        # Load segmentation data
         annotations = gcp_ops.load_segmentation_data(url)
         
         if annotations is None:
             logger.error(f"No segmentation annotations found at {url}")
             return jsonify({'error': 'Segmentation annotations not found'}), 404
         
-        # Get the segmentation indices array from DIATOMS_DATA
+        # Get enhanced segmentation data
         segmentation_indices = None
         if image_index is not None and 0 <= image_index < len(DIATOMS_DATA):
-            segmentation_indices = DIATOMS_DATA[image_index].get('segmentation_indices_array')
+            image_data = DIATOMS_DATA[image_index]
+            segmentation_indices = image_data.get('segmentation_indices_array', [])
             
-        logger.info(f"Successfully loaded segmentation annotations: {len(annotations)} characters")
-        logger.info(f"Segmentation indices: {segmentation_indices}")
+            # Add canvas dimensions if not present
+            if 'canvasWidth' not in image_data:
+                image_data['canvasWidth'] = image_data.get('image_width')
+                image_data['canvasHeight'] = image_data.get('image_height')
+                
+                # Update PAPER_JSON_FILES with canvas dimensions
+                for paper in PAPER_JSON_FILES:
+                    if 'diatoms_data' in paper:
+                        if isinstance(paper['diatoms_data'], str):
+                            paper['diatoms_data'] = json.loads(paper['diatoms_data'])
+                        
+                        if paper['diatoms_data'].get('image_url') == image_data.get('image_url'):
+                            paper['diatoms_data'].update({
+                                'canvasWidth': image_data['canvasWidth'],
+                                'canvasHeight': image_data['canvasHeight']
+                            })
+                            break
+            
+            # Process segmentations using SegmentationOps
+            image_data = segmentation_ops.process_image_segmentations(
+                image_data,
+                annotations
+            )
+            segmentation_indices = image_data.get('segmentation_indices_array', [])
         
         return jsonify({
             'annotations': annotations,
@@ -756,6 +637,116 @@ def get_segmentation():
         return jsonify({
             'error': f"Failed to fetch segmentation annotations: {str(e)}"
         }), 500
+
+# @app.route('/api/save_segmentation', methods=['POST'])
+# def save_segmentation():
+#     """Save segmentation data and indices array to GCS bucket and update DIATOMS_DATA"""
+#     try:
+#         data = request.json
+#         image_index = data.get('image_index', 0)
+#         segmentation_data = data.get('segmentation_data', '')
+#         image_filename = data.get('image_filename', '')
+#         segmentation_indices = data.get('segmentation_indices', [])  # Get indices array
+        
+#         logger.info("Saving segmentation for image {}".format(image_filename))
+#         logger.debug("Segmentation data: {}".format(segmentation_data))
+#         logger.debug("Segmentation indices: {}".format(segmentation_indices))
+        
+#         if not segmentation_data or not image_filename:
+#             raise ValueError("Missing required data")
+            
+#         # Save segmentation data to GCS bucket
+#         segmentation_url = gcp_ops.save_segmentation_data(
+#             segmentation_data=segmentation_data,
+#             image_filename=image_filename,
+#             session_id=SESSION_ID,
+#             bucket_name=BUCKET_SEGMENTATION_LABELS
+#         )
+        
+#         if not segmentation_url:
+#             raise Exception("Failed to save segmentation data to GCS")
+        
+#         logger.info("Saved segmentation to URL: {}".format(segmentation_url))
+            
+#         # Update DIATOMS_DATA with both the segmentation URL and indices array
+#         if 0 <= image_index < len(DIATOMS_DATA):
+#             DIATOMS_DATA[image_index]['segmentation_url'] = segmentation_url
+#             DIATOMS_DATA[image_index]['segmentation_indices_array'] = segmentation_indices
+            
+#             # Update corresponding entry in PAPER_JSON_FILES
+#             for paper in PAPER_JSON_FILES:
+#                 if 'diatoms_data' in paper:
+#                     if isinstance(paper['diatoms_data'], str):
+#                         paper['diatoms_data'] = json.loads(paper['diatoms_data'])
+                    
+#                     if paper['diatoms_data'].get('image_url') == DIATOMS_DATA[image_index].get('image_url'):
+#                         paper['diatoms_data']['segmentation_url'] = segmentation_url
+#                         paper['diatoms_data']['segmentation_indices_array'] = segmentation_indices
+#                         break
+            
+#             # Save updated data to GCS
+#             success = ClaudeAI.update_and_save_papers(
+#                 PAPERS_JSON_PUBLIC_URL,
+#                 PAPER_JSON_FILES,
+#                 DIATOMS_DATA
+#             )
+            
+#             if not success:
+#                 raise Exception("Failed to update papers data in GCS")
+                
+#             return jsonify({
+#                 'success': True,
+#                 'message': 'Segmentation saved successfully',
+#                 'segmentation_url': segmentation_url,
+#                 'segmentation_indices_array': segmentation_indices
+#             })
+#         else:
+#             raise ValueError("Invalid image index: {}".format(image_index))
+            
+#     except Exception as e:
+#         logger.error("Error saving segmentation: {}".format(str(e)))
+#         return jsonify({
+#             'success': False,
+#             'error': str(e)
+#         }), 500
+
+# @app.route('/api/get_segmentation')
+# def get_segmentation():
+#     """Proxy route to fetch segmentation annotations and indices from GCS"""
+#     try:
+#         url = request.args.get('url')
+#         image_index = request.args.get('image_index', type=int)
+        
+#         if not url:
+#             raise ValueError("No URL provided")
+            
+#         logger.info(f"Attempting to load segmentation annotations from: {url}")
+        
+#         # Use the existing load_segmentation_data method but store as annotations
+#         annotations = gcp_ops.load_segmentation_data(url)
+        
+#         if annotations is None:
+#             logger.error(f"No segmentation annotations found at {url}")
+#             return jsonify({'error': 'Segmentation annotations not found'}), 404
+        
+#         # Get the segmentation indices array from DIATOMS_DATA
+#         segmentation_indices = None
+#         if image_index is not None and 0 <= image_index < len(DIATOMS_DATA):
+#             segmentation_indices = DIATOMS_DATA[image_index].get('segmentation_indices_array')
+            
+#         logger.info(f"Successfully loaded segmentation annotations: {len(annotations)} characters")
+#         logger.info(f"Segmentation indices: {segmentation_indices}")
+        
+#         return jsonify({
+#             'annotations': annotations,
+#             'segmentation_indices_array': segmentation_indices
+#         }), 200
+        
+#     except Exception as e:
+#         logger.error(f"Error in get_segmentation: {str(e)}")
+#         return jsonify({
+#             'error': f"Failed to fetch segmentation annotations: {str(e)}"
+#         }), 500
         
 @app.route('/api/download_segmentation')
 def download_segmentation():
@@ -838,82 +829,6 @@ def ensure_clean_temp_dir(tmp_dir):
     except Exception as e:
         print(f"Error creating temporary directory: {e}")
         raise
-
-# @app.route('/upload_pdfs', methods=['GET', 'POST'])
-# def upload_file():
-#     if request.method == 'POST':
-#         if 'files[]' not in request.files:
-#             flash('No files selected')
-#             return redirect(request.url)
-        
-#         files = request.files.getlist('files[]')
-        
-#         if not files or all(file.filename == '' for file in files):
-#             flash('No files selected')
-#             return redirect(request.url)
-        
-#         upload_count = 0
-#         error_count = 0
-        
-#         # Ensure base upload folder exists
-#         os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-        
-#         # Create a clean temporary directory for this session
-#         TMP_DIR = os.path.join(app.config['UPLOAD_FOLDER'], SESSION_ID)
-#         try:
-#             ensure_clean_temp_dir(TMP_DIR)
-#         except Exception as e:
-#             flash('Error preparing upload directory')
-#             print(f"Directory preparation error: {e}")
-#             return redirect(request.url)
-        
-#         for file in files:
-#             if file and allowed_file(file.filename):
-#                 filename = secure_filename(file.filename)
-#                 temp_path = os.path.join(TMP_DIR, filename)
-                
-#                 try:
-#                     file.save(temp_path)
-#                     blob_name, public_url = gcp_ops.save_pdf_file_to_bucket(
-#                         temp_path, 
-#                         PAPERS_BUCKET, 
-#                         SESSION_ID
-#                     )
-                    
-#                     if blob_name:
-#                         upload_count += 1
-#                     else:
-#                         error_count += 1
-                        
-#                 except Exception as e:
-#                     print(f"Error processing file {filename}: {e}")
-#                     error_count += 1
-#                 finally:
-#                     # Clean up temporary file regardless of success/failure
-#                     if os.path.exists(temp_path):
-#                         try:
-#                             os.remove(temp_path)
-#                         except Exception as e:
-#                             print(f"Error removing temporary file {temp_path}: {e}")
-#             else:
-#                 error_count += 1
-        
-#         # Clean up the temporary directory after all files are processed
-#         try:
-#             shutil.rmtree(TMP_DIR)
-#         except Exception as e:
-#             print(f"Error removing temporary directory {TMP_DIR}: {e}")
-        
-#         if upload_count > 0:
-#             flash(f'Successfully uploaded {upload_count} file(s)')
-#         if error_count > 0:
-#             flash(f'Failed to upload {error_count} file(s)')
-        
-#         return redirect(url_for('upload_file'))
-
-#     # GET request handling
-#     files = gcp_ops.get_uploaded_files(PAPERS_BUCKET, SESSION_ID)
-#     return render_template('upload_images.html', files=files)
 
 @app.route('/upload_pdfs', methods=['GET', 'POST'])
 def upload_file():
@@ -1014,49 +929,6 @@ def display_table():
     """Route to display the auto-refreshing table"""
     data = fetch_and_process_data()
     return render_template('colosus.html', data=data)
-
-#-----------------------------------------------------------------------------------------------
-#------------------------------Diatom List Assistant-------------------------------------------
-# The list assistant retrieves the missing diatom species and adds them to diatoms_data for the image
-# @app.route('/api/diatom_list_assistant', methods=['GET'])
-# def get_diatom_list_assistant():
-#     try:
-#         image_index = request.args.get('index', 0, type=int)
-        
-#         if not DIATOMS_DATA or image_index >= len(DIATOMS_DATA):
-#             return jsonify({
-#                 'error': 'No data available or invalid index'
-#             }), 404
-
-#         # Get the current image data
-#         current_image_data = DIATOMS_DATA[image_index]
-        
-#         # Extract labels from the info array
-#         labels = [info['label'][0] for info in current_image_data.get('info', [])]
-        
-#         # Find corresponding paper in PAPER_JSON_FILES
-#         pdf_text_content = ""
-#         for paper in PAPER_JSON_FILES:
-#             if isinstance(paper.get('diatoms_data'), str):
-#                 paper_diatoms_data = json.loads(paper['diatoms_data'])
-#             else:
-#                 paper_diatoms_data = paper.get('diatoms_data', {})
-                
-#             if paper_diatoms_data.get('image_url') == current_image_data.get('image_url'):
-#                 pdf_text_content = paper.get('pdf_text_content', '')
-#                 break
-        
-#         return jsonify({
-#             'labels': labels,
-#             'pdf_text_content': pdf_text_content
-#         })
-        
-#     except Exception as e:
-#         app.logger.error(f"Error in get_diatom_list_assistant: {str(e)}")
-#         return jsonify({
-#             'error': f'Error retrieving diatom list assistant data: {str(e)}'
-#         }), 500
-
 
 
 @app.route('/api/diatom_list_assistant', methods=['GET'])
@@ -1336,7 +1208,6 @@ def align_all_images():
 
 
 # ----------------------------------------------------------------------------------------
-
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
