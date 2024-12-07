@@ -543,80 +543,91 @@
         }, [imageIndex]);
 
 
+
         const loadImageData = async (index) => {
-    try {
-        const response = await fetch(`/api/diatoms?index=${index}`);
-        const data = await response.json();
-        
-        if (data.error) {
-            setError(data.error);
-            return;
-        }
-
-        setImageUrl(data.data.image_url);
-        setImageData(data.data);
-        setTotalImages(data.total_images);
-        setImageIndex(data.current_index);
-        setSelectedSegmentIndex(null);
-
-        if (data.data.segmentation_url) {
             try {
-                const segResponse = await fetch(
-                    `/api/get_segmentation?url=${encodeURIComponent(data.data.segmentation_url)}&image_index=${index}`
-                );
+                const response = await fetch(`/api/diatoms?index=${index}`);
+                const data = await response.json();
                 
-                if (!segResponse.ok) {
-                    throw new Error('Failed to fetch segmentation data');
+                if (data.error) {
+                    setError(data.error);
+                    return;
                 }
-                
-                const segData = await segResponse.json();
-                if (segData.annotations) {
-                    // Process segmentations and add their properties
-                    const processedPolygons = parseSegmentationText(
-                        segData.annotations,
-                        data.data.image_width,
-                        data.data.image_height
-                    );
 
-                    // Add enhanced data to existing segmentations
-        const enhancedPolygons = processedPolygons.map(polygon => {
-                    const enhancedData = calculatePolygonData(
-                        polygon.points,
-                        data.data.image_width,
-                        data.data.image_height
-                    );
-                    return {
-                        ...polygon,
-                        ...enhancedData
-                    };
+                // Wait for image to load to get actual dimensions
+                const img = new Image();
+                img.src = data.data.image_url;
+                await new Promise((resolve, reject) => {
+                    img.onload = resolve;
+                    img.onerror = reject;
                 });
 
-                // If there are existing segmentation indices, merge their data
-                if (segData.segmentation_indices_array) {
-                    const mergedPolygons = enhancedPolygons.map((polygon, index) => {
-                        const existingData = segData.segmentation_indices_array[index];
-                        return {
-                            ...polygon,
-                            ...existingData
-                        };
-                    });
-                    setPolygons(mergedPolygons);
+                // Update image data with actual dimensions
+                const imageDataWithDimensions = {
+                    ...data.data,
+                    image_width: img.naturalWidth,
+                    image_height: img.naturalHeight
+                };
+
+                setImageUrl(data.data.image_url);
+                setImageData(imageDataWithDimensions);
+                setTotalImages(data.total_images);
+                setImageIndex(data.current_index);
+                setSelectedSegmentIndex(null);
+
+                if (data.data.segmentation_url) {
+                    try {
+                        const segResponse = await fetch(
+                            `/api/get_segmentation?url=${encodeURIComponent(data.data.segmentation_url)}&image_index=${index}`
+                        );
+                        
+                        if (!segResponse.ok) {
+                            throw new Error('Failed to fetch segmentation data');
+                        }
+                        
+                        const segData = await segResponse.json();
+                        console.log('Loaded segmentation data:', segData); // Debug log
+
+                        if (segData.segmentation_indices_array?.length > 0) {
+                            // Use existing segmentation indices if available
+                            const enhancedPolygons = segData.segmentation_indices_array.map(segment => ({
+                                ...segment,
+                                color: segment.color || getRandomColor()
+                            }));
+                            console.log('Using existing segmentation indices:', enhancedPolygons); // Debug log
+                            setPolygons(enhancedPolygons);
+                        } else if (segData.annotations) {
+                            // Parse annotations if no indices exist
+                            const processedPolygons = parseSegmentationText(
+                                segData.annotations,
+                                img.naturalWidth,
+                                img.naturalHeight
+                            );
+
+                            const enhancedPolygons = processedPolygons.map(polygon => ({
+                                ...polygon,
+                                ...calculatePolygonData(
+                                    polygon.points,
+                                    img.naturalWidth,
+                                    img.naturalHeight
+                                )
+                            }));
+                            console.log('Processed new polygons:', enhancedPolygons); // Debug log
+                            setPolygons(enhancedPolygons);
+                        }
+                    } catch (error) {
+                        console.error('Error loading segmentation data:', error);
+                        setError('Failed to load segmentation data');
+                    }
                 } else {
-                    setPolygons(enhancedPolygons);
+                    setPolygons([]);
                 }
+            } catch (error) {
+                setError('Failed to load image data');
+                console.error('Error:', error);
             }
-        } catch (error) {
-            console.error('Error loading segmentation data:', error);
-            setError('Failed to load segmentation data');
-        }
-        } else {
-        setPolygons([]);
-        }
-        } catch (error) {
-        setError('Failed to load image data');
-        console.error('Error:', error);
-        }
         };
+
 
         const handleUpdateSegmentations = async () => {
             setIsUpdating(true);
@@ -647,10 +658,18 @@
             }
         };
 
+
         const handleCanvasClick = async (e) => {
-            const rect = canvasRef.current.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
+            const canvas = canvasRef.current;
+            const rect = canvas.getBoundingClientRect();
+            
+            // Calculate the scaling factors
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            
+            // Get click coordinates relative to the canvas
+            const x = (e.clientX - rect.left) * scaleX;
+            const y = (e.clientY - rect.top) * scaleY;
 
             if (!isDrawing) {
                 setIsDrawing(true);
@@ -668,7 +687,17 @@
                         color: getRandomColor()
                     };
                     
-                    const updatedPolygons = [...polygons, newPolygon];
+                    // Calculate enhanced data before saving
+                    const enhancedPolygon = {
+                        ...newPolygon,
+                        ...calculatePolygonData(
+                            newPolygon.points,
+                            imageData.image_width,
+                            imageData.image_height
+                        )
+                    };
+                    
+                    const updatedPolygons = [...polygons, enhancedPolygon];
                     setPolygons(updatedPolygons);
                     setCurrentPolygon([]);
                     setIsDrawing(false);
@@ -679,6 +708,7 @@
                 }
             }
         };
+
 
         const handleSave = async (polygonsToSave = polygons) => {
             setIsSaving(true);
@@ -782,33 +812,31 @@
 
         const handleMouseMove = (e) => {
             if (!isDrawing || !canvasRef.current) return;
+            
+            // Get current state of canvas and drawing
             const canvas = canvasRef.current;
             const ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // Redraw existing polygons
-            polygons.forEach(polygon => {
-                if (polygon.points.length < 3) return;
-                ctx.beginPath();
-                ctx.moveTo(polygon.points[0].x, polygon.points[0].y);
-                polygon.points.forEach(point => {
-                    ctx.lineTo(point.x, point.y);
-                });
-                ctx.closePath();
-                ctx.strokeStyle = polygon.color;
-                ctx.lineWidth = 2;
-                ctx.stroke();
-                ctx.fillStyle = `${polygon.color}40`;
-                ctx.fill();
-            });
+            // Clear and redraw
+            drawPolygons();
 
-            // Draw current polygon
+            // Draw current polygon path
             if (currentPolygon.length > 0) {
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                
                 ctx.beginPath();
                 ctx.moveTo(currentPolygon[0].x, currentPolygon[0].y);
                 currentPolygon.forEach(point => {
                     ctx.lineTo(point.x, point.y);
                 });
+                
+                // Draw line to current mouse position
+                const mouseX = (e.clientX - rect.left) * scaleX;
+                const mouseY = (e.clientY - rect.top) * scaleY;
+                ctx.lineTo(mouseX, mouseY);
+                
                 ctx.strokeStyle = '#2ecc71';
                 ctx.lineWidth = 2;
                 ctx.stroke();
